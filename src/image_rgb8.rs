@@ -5,66 +5,108 @@ use bytemuck::try_cast_slice;
 use std::cmp::{min, max};
 
 
-pub struct ImageRGB {
-    /// width of an image
-    pub width: usize,
-    pub height: usize, // height of an image
-    pub image_data: Vec<[u8; 3]>, // vector pixels of the image
-    background_data: BackgroundRGB, // Vec<[u8; 3]
+fn bytes_to_rgb8(bytes: &[u8]) -> Vec<[u8; 3]> {
+    // converts a slice of bytes to a vector of pixels
+    try_cast_slice::<u8, [u8; 3]>(bytes).expect("This shouldn't fail!").to_vec()
 }
 
-impl ImageRGB {
+fn rgb8_to_bytes(rgb8: &[[u8; 3]]) -> &[u8] {
+    // returns a slice of bytes of a vector (slice) of pixels
+    try_cast_slice(rgb8).expect("This shouldn't fail!")
+}
+
+enum BackgroundRGB8 {
+    Color([u8; 3]),
+    Image(Vec<[u8; 3]>)
+}
+
+
+pub struct ImageRGB8 {
+    /// The width of the image
+    pub width: usize,
+    /// The height of the image
+    pub height: usize,
+    /// The image pixel data
+    pub image_data: Vec<[u8; 3]>,
+    background_data: BackgroundRGB8
+}
+
+impl ImageRGB8 {
     pub fn new(width: usize, height: usize, background: [u8; 3]) -> Self {
-        // return ImageRGB struct
-        Self {width, height, image_data: vec![background; width * height], background_data: BackgroundRGB::Color(background)}
+        //! Returns new [ImageRGB8].
+        //! ```width```, ```height``` are image dimensions.
+        //! ```background``` is image's color.
+
+        Self {width, height, image_data: vec![background; width * height], background_data: BackgroundRGB8::Color(background)}
     }
 
-    pub fn from_png(path: &str) -> Self {
-        // read PNG file
-        let decoder = png::Decoder::new(File::open(path).unwrap());
-        let mut reader = decoder.read_info().unwrap();
-        // Allocate the output buffer.
-        let mut buf = vec![0; reader.output_buffer_size()];
-        // Read the next frame. An APNG might contain multiple frames.
-        let info = reader.next_frame(&mut buf).unwrap();
-        // Grab the bytes of the image.
-        let bytes: &[u8];
+    pub fn from_png(path: &str) -> Result<Self, &'static str> {
+        //! Reads image data from PNG file.
+        //! Returns [Result] which holds new [ImageRGB8] or [Err] with informative message.
+        //! ```path``` is the path to PNG file.
+        //! The PNG file should be RGB or RGBA with bit depth 8.
 
-        if info.bit_depth == png::BitDepth::Eight {
-            // if image is not RGB panic, if it is RGBA convert to RGB
-            match info.color_type {
-                png::ColorType::Rgb => {
-                        bytes = &buf[..info.buffer_size()];
-                    },
-                png::ColorType::Rgba => {
-                        buf.truncate(info.buffer_size());
-                        let mut iterator = 1..(buf.len() + 1);
-                        buf.retain(|_| iterator.next().unwrap() % 4 != 0);
-                        bytes = &buf;
-                    },
-                _ => panic!("Image color not RGB or RGBA!")
-            }
-        } else {
-            panic!("Image BitDepth isn't 8!")
+        match File::open(path) {
+            Ok(file) =>
+                {
+                    let decoder = png::Decoder::new(file);
+                    match decoder.read_info() {
+                        Ok(information) =>
+                            {
+                                let mut reader = information;
+                                // Allocate the output buffer.
+                                let mut buf = vec![0; reader.output_buffer_size()];
+                                // Read the next frame. An APNG might contain multiple frames.
+                                match reader.next_frame(&mut buf) {
+                                    Ok(new_information) =>
+                                        {
+                                            let info = new_information;
+                                            // Grab the bytes of the image.
+                                            let bytes: &[u8];
+                                            if info.bit_depth == png::BitDepth::Eight {
+                                                // if image is not RGB panic, if it is RGBA convert to RGB
+                                                match info.color_type {
+                                                    png::ColorType::Rgb => {
+                                                            bytes = &buf[..info.buffer_size()];
+                                                            // return ImageRGB8 struct
+                                                            Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
+                                                        },
+                                                    png::ColorType::Rgba => {
+                                                            buf.truncate(info.buffer_size());
+                                                            let mut iterator = 1..(buf.len() + 1);
+                                                            buf.retain(|_| iterator.next().expect("This shouldn't fail!") % 4 != 0);
+                                                            bytes = &buf;
+                                                            // return ImageRGB8 struct
+                                                            Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
+                                                        },
+                                                    _ => Err("Image color not RGB or RGBA!")
+                                                }
+                                            } else {
+                                                Err("Image bit depth is not 8!")
+                                            }
+                                        },
+                                    Err(_) => Err("Can't read file!")
+                                }
+                            },
+                        Err(_) => Err("Can't read file!"),
+                    }
+                },
+            Err(_) => Err("Can't open file!"),
         }
-
-        // return ImageRGB struct
-        Self::from_bytes(info.width as usize, info.height as usize, bytes)
     }
 
-    pub fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Self {
-        // if number of bytes doesn't match expected number of bytes, panic
+    pub fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Result<Self, &'static str> {
+        //! Returns [Result] with new [ImageRGB8] or [Err] with informative message.
+        //! It is constructed from ```width```, ```height``` and ```bytes```
+
         if width * height * 3 != bytes.len() {
-            panic!("Number of bytes does not match an RGB image with given dimensions!")
+            // if number of bytes doesn't match expected number of bytes, panic
+            Err("Number of bytes does not match an RGB image with given dimensions!")
+        } else {
+            // generate RGB image from bytes separately as it needs to be cloned as two separate instances are needed
+            let img = bytes_to_rgb8(bytes);
+            Ok(Self {width, height, image_data: img.clone(), background_data: BackgroundRGB8::Image(img)})
         }
-        // generate RGB image from bytes separately as it needs to be cloned as two separate instances are needed
-        let img = Self::bytes_to_rgb(bytes);
-        Self {width, height, image_data: img.clone(), background_data: BackgroundRGB::Image(img)}
-    }
-
-    pub fn bytes_to_rgb(bytes: &[u8]) -> Vec<[u8; 3]> {
-        // converts slice of bytes to vector of pixels
-        try_cast_slice::<u8, [u8; 3]>(bytes).unwrap().to_vec()
     }
 
     pub fn to_png(&self, path: &str) {
@@ -84,15 +126,15 @@ impl ImageRGB {
 
     pub fn to_bytes(&self) -> &[u8] {
         // returns slice of bytes of image_data
-        try_cast_slice(&self.image_data).unwrap()
+        rgb8_to_bytes(&self.image_data)
     }
 
     pub fn clear(&mut self) {
         // clear image of any drawings (by filling with background or replacing with background_data)
 
         match &self.background_data {
-            BackgroundRGB::Color(color) => self.image_data.fill(*color),
-            BackgroundRGB::Image(img) => self.image_data = img.clone(),
+            BackgroundRGB8::Color(color) => self.image_data.fill(*color),
+            BackgroundRGB8::Image(img) => self.image_data = img.clone(),
         }
     }
 
@@ -233,10 +275,4 @@ impl ImageRGB {
     pub fn draw_circle_filled() {
 
     }
-}
-
-
-enum BackgroundRGB {
-    Color([u8; 3]),
-    Image(Vec<[u8; 3]>)
 }
