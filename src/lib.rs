@@ -8,7 +8,7 @@ mod tests {
 
     #[test]
     fn main() {
-        let mut img = ImageRGB::new(200, 200, [255, 0, 255]);
+        let mut img = ImageRGB::from_png("test_image2.png");
         img.clear();
         img.to_png("test_image.png");
     }

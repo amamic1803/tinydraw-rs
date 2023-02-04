@@ -6,18 +6,17 @@ use std::cmp::{min, max};
 
 
 pub struct ImageRGB {
-    pub width: usize, // width of an image
+    /// width of an image
+    pub width: usize,
     pub height: usize, // height of an image
-    pub background: [u8; 3], // background color of the image (used only with ImageRGB::new())
     pub image_data: Vec<[u8; 3]>, // vector pixels of the image
-    background_data: Vec<[u8; 3]>, // background (original) image (used only with ImageRGB::from_bytes() and ImageRGB::from_png())
-    _private: () // private field, unused, to not allow directly constructing ImageRGB struct
+    background_data: BackgroundRGB, // Vec<[u8; 3]
 }
 
 impl ImageRGB {
     pub fn new(width: usize, height: usize, background: [u8; 3]) -> Self {
         // return ImageRGB struct
-        Self {width, height, background, image_data: vec![background; width * height], background_data: vec![], _private: ()}
+        Self {width, height, image_data: vec![background; width * height], background_data: BackgroundRGB::Color(background)}
     }
 
     pub fn from_png(path: &str) -> Self {
@@ -29,11 +28,24 @@ impl ImageRGB {
         // Read the next frame. An APNG might contain multiple frames.
         let info = reader.next_frame(&mut buf).unwrap();
         // Grab the bytes of the image.
-        let bytes = &buf[..info.buffer_size()];
+        let bytes: &[u8];
 
-        // if image is not RGB panic
-        if info.color_type != png::ColorType::Rgb {
-            panic!("Image color not RGB!")
+        if info.bit_depth == png::BitDepth::Eight {
+            // if image is not RGB panic, if it is RGBA convert to RGB
+            match info.color_type {
+                png::ColorType::Rgb => {
+                        bytes = &buf[..info.buffer_size()];
+                    },
+                png::ColorType::Rgba => {
+                        buf.truncate(info.buffer_size());
+                        let mut iterator = 1..(buf.len() + 1);
+                        buf.retain(|_| iterator.next().unwrap() % 4 != 0);
+                        bytes = &buf;
+                    },
+                _ => panic!("Image color not RGB or RGBA!")
+            }
+        } else {
+            panic!("Image BitDepth isn't 8!")
         }
 
         // return ImageRGB struct
@@ -47,7 +59,7 @@ impl ImageRGB {
         }
         // generate RGB image from bytes separately as it needs to be cloned as two separate instances are needed
         let img = Self::bytes_to_rgb(bytes);
-        Self {width, height, background: [0, 0, 0], image_data: img.clone(), background_data: img, _private: ()}
+        Self {width, height, image_data: img.clone(), background_data: BackgroundRGB::Image(img)}
     }
 
     pub fn bytes_to_rgb(bytes: &[u8]) -> Vec<[u8; 3]> {
@@ -77,10 +89,10 @@ impl ImageRGB {
 
     pub fn clear(&mut self) {
         // clear image of any drawings (by filling with background or replacing with background_data)
-        if self.background_data.is_empty() {
-            self.image_data.fill(self.background);
-        } else {
-            self.image_data = self.background_data.clone();
+
+        match &self.background_data {
+            BackgroundRGB::Color(color) => self.image_data.fill(*color),
+            BackgroundRGB::Image(img) => self.image_data = img.clone(),
         }
     }
 
@@ -221,4 +233,10 @@ impl ImageRGB {
     pub fn draw_circle_filled() {
 
     }
+}
+
+
+enum BackgroundRGB {
+    Color([u8; 3]),
+    Image(Vec<[u8; 3]>)
 }
