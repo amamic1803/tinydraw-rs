@@ -33,11 +33,11 @@ pub struct ImageRGB8 {
 
 impl ImageRGB8 {
     pub fn new(width: usize, height: usize, background: [u8; 3]) -> Self {
-        //! Returns new [ImageRGB8].
+        //! Returns a new [ImageRGB8].
         //! ```width```, ```height``` are image dimensions.
         //! ```background``` is image's color.
 
-        Self {width, height, image_data: vec![background; width * height], background_data: BackgroundRGB8::Color(background)}
+        Self { width, height, image_data: vec![background; width * height], background_data: BackgroundRGB8::Color(background) }
     }
 
     pub fn from_png(path: &str) -> Result<Self, &'static str> {
@@ -67,18 +67,18 @@ impl ImageRGB8 {
                                                 // if image is not RGB panic, if it is RGBA convert to RGB
                                                 match info.color_type {
                                                     png::ColorType::Rgb => {
-                                                            bytes = &buf[..info.buffer_size()];
-                                                            // return ImageRGB8 struct
-                                                            Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
-                                                        },
+                                                        bytes = &buf[..info.buffer_size()];
+                                                        // return ImageRGB8 struct
+                                                        Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
+                                                    },
                                                     png::ColorType::Rgba => {
-                                                            buf.truncate(info.buffer_size());
-                                                            let mut iterator = 1..(buf.len() + 1);
-                                                            buf.retain(|_| iterator.next().expect("This shouldn't fail!") % 4 != 0);
-                                                            bytes = &buf;
-                                                            // return ImageRGB8 struct
-                                                            Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
-                                                        },
+                                                        buf.truncate(info.buffer_size());
+                                                        let mut iterator = 1..(buf.len() + 1);
+                                                        buf.retain(|_| iterator.next().expect("This shouldn't fail!") % 4 != 0);
+                                                        bytes = &buf;
+                                                        // return ImageRGB8 struct
+                                                        Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
+                                                    },
                                                     _ => Err("Image color not RGB or RGBA!")
                                                 }
                                             } else {
@@ -105,32 +105,69 @@ impl ImageRGB8 {
         } else {
             // generate RGB image from bytes separately as it needs to be cloned as two separate instances are needed
             let img = bytes_to_rgb8(bytes);
-            Ok(Self {width, height, image_data: img.clone(), background_data: BackgroundRGB8::Image(img)})
+            Ok(Self { width, height, image_data: img.clone(), background_data: BackgroundRGB8::Image(img) })
         }
     }
 
-    pub fn to_png(&self, path: &str) {
-        // saves image as PNG
+    pub fn to_png(&self, path: &str) -> Result<(), &'static str> {
+        //! Saves image as PNG.
+        //! ```path``` is a path + filename where it will be saved.
+        //! Returns ```Ok(())``` if everything goes well, or ```Err(&str)``` with description of the error.
         let path = Path::new(path);
-        let file = File::create(path).unwrap();
-        let w = &mut BufWriter::new(file);
 
-        let mut encoder = png::Encoder::new(w, self.width as u32, self.height as u32);
-        encoder.set_color(png::ColorType::Rgb);
-        encoder.set_depth(png::BitDepth::Eight);
+        match File::create(path) {
+            Ok(new_file) =>
+                {
+                    let file = new_file;
+                    let w = BufWriter::new(file);
 
-        let mut writer = encoder.write_header().unwrap();
+                    let mut encoder = png::Encoder::new(w, self.width as u32, self.height as u32);
+                    encoder.set_color(png::ColorType::Rgb);
+                    encoder.set_depth(png::BitDepth::Eight);
 
-        writer.write_image_data(self.to_bytes()).unwrap();
+                    match encoder.write_header() {
+                        Ok(mut writer) =>
+                            {
+                                match writer.write_image_data(self.to_bytes()) {
+                                    Ok(_) => Ok(()),
+                                    Err(_) => Err("Can't write image to file!")
+                                }
+                            },
+                        Err(_) => Err("Can't write image to file!")
+                    }
+                },
+            Err(_) => Err("Can't create file!")
+        }
     }
 
     pub fn to_bytes(&self) -> &[u8] {
-        // returns slice of bytes of image_data
+        //! Returns a slice of bytes of ```image_data```
         rgb8_to_bytes(&self.image_data)
     }
 
+    pub fn get_pixel(&self, x: usize, y: usize) -> Result<[u8; 3], &'static str> {
+        //! Returns an RGB value of pixel with coordinates ```x``` and ```y``` if that pixel exists.
+
+        if x >= self.width || y >= self.height {
+            Err("Given coordinates exceed image limits!")
+        } else {
+            Ok(self.image_data[self.width * (self.height - 1 - y) + x])
+        }
+    }
+
+    pub fn set_pixel(&mut self, x: usize, y: usize, color: [u8; 3]) {
+        //! Changes pixel with given coordinates to desired ```color```.
+        //! If that pixel doesn't exist, do nothing.
+
+        if x < self.width || y < self.width {
+            self.image_data[self.width * (self.height - 1 - y) + x] = color;
+        }
+    }
+
     pub fn clear(&mut self) {
-        // clear image of any drawings (by filling with background or replacing with background_data)
+        //! Clears ```image_data``` of any drawings (resets it to state it was in when [ImageRGB8] was created).
+        //! If image was created with [ImageRGB8::new()] it uses background color supplied there.
+        //! If image was created with [ImageRGB8::from_png()] or with [ImageRGB8::from_bytes()], another copy of original image is saved, which is used to clear ```image_data```.
 
         match &self.background_data {
             BackgroundRGB8::Color(color) => self.image_data.fill(*color),
@@ -138,17 +175,12 @@ impl ImageRGB8 {
         }
     }
 
-    pub fn get_pixel(&self, x: usize, y: usize) -> [u8; 3] {
-        // returns RGB value of single pixel
-        if x >= self.width || y >= self.height {
-            panic!("Given coordinates exceed image limits!")
-        }
-        self.image_data[self.width * (self.height - 1 - y) + x]
-    }
+    pub fn set_background_color(&mut self, color: [u8; 3]) {
+        //! Set a new color that will be used as background.
+        //! Note that this only changes internal background data.
+        //! If you also want to apply this background (fill ```image_data``` with this color), call [ImageRGB8::clear()] after this.
 
-    pub fn set_pixel(&mut self, x: usize, y: usize, color: [u8; 3]) {
-        // change color of single pixel
-        self.image_data[self.width * (self.height - 1 - y) + x] = color;
+        self.background_data = BackgroundRGB8::Color(color);
     }
 
     pub fn draw_line(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: [u8; 3]) {
