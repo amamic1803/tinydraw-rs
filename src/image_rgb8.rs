@@ -247,56 +247,85 @@ impl ImageRGB8 {
         }
     }
 
-    pub fn draw_rectangle(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: [u8; 3], thickness: usize) {
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::collapsible_else_if)]
+    pub fn draw_rectangle(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: [u8; 3], thickness: usize, opacity: f64) {
+        //! Draws rectangle. `x1`, `y1` are coordinates of first corner, and `x2`, `y2` are coordinates of opposite corner.
+        //! `color` defines color of rectangle.
+        //! `thickness` defines how thick rectangle will be. (thickness is added to the inside of the rectangle).
+        //! If set to 0, rectangle will be filled.
+        //! `opacity` sets whether rectangle will be transparent.
+        //! `0.0` means rectangle will be completely transparent, while `1.0` and above means rectangle won't be transparent.
 
-        // find which x is bigger to not get integer overflows when subtracting (because we are using usize which doesn't support negative integers)
-        let smaller_x = min(x1, x2);
-        let bigger_x = max(x1, x2);
-
-        if x1 >= self.width || x2 >= self.width || y1 >= self.height || y2 >= self.height {
-            // panic if any of the coordinates go out of the image
-            panic!("Given coordinates exceed image limits!");
-        } else if thickness > (((bigger_x - smaller_x) / 2) + 1) {
-            // if thickness set too high panic to avoid long, needless loops
-            panic!("Thickness set too high!")
+        // find corners
+        let mut smaller_x = min(x1, x2);
+        let mut bigger_x = max(x1, x2);
+        let mut smaller_y = min(y1, y2);
+        let mut bigger_y = max(y1, y2);
+        if bigger_x >= self.width {
+            bigger_x = self.width - 1;
+        }
+        if bigger_y >= self.height {
+            bigger_y = self.height - 1;
         }
 
-        // find which y is bigger to know which one to put into iterator first and which second
-        let smaller_y = min(y1, y2);
-        let bigger_y = max(y1, y2);
+        // if opacity is 0.0, or less, then rectangle is transparent, nothing is to be drawn.
+        if opacity >= 0.0 {
+            if thickness == 0 {
+                if opacity >= 1.0 {
+                    // Draw filled, solid rectangle.
+                    // draws line by line
+                    for y in smaller_y..(bigger_y + 1) {
+                        let base_location = self.width * (self.height - 1 - y);
+                        self.image_data[(base_location + smaller_x)..(base_location + bigger_x + 1)].fill(color);
+                    }
+                } else {
+                    // Draw filled, transparent rectangle.
+                    // draws each pixel by blending it to the background (because of transparency)
+                    let reverse_opacity = 1.0 - opacity;
+                    for y in smaller_y..(bigger_y + 1) {
+                        let base_location = self.width * (self.height - 1 - y);
+                        for x in (base_location + smaller_x)..(base_location + bigger_x + 1) {
+                            for channel in 0..color.len() {
+                                // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                self.image_data[x][channel] = ((self.image_data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
+                            }
+                        }
+                    }
+                }
+            } else {
+                if opacity >= 1.0 {
+                    // Draw rectangle, solid
+                    let mut used_thickness = thickness;
 
-        // draw horizontal sides
-        self.image_data[(self.width * (self.height - 1 - y1) + smaller_x)..(self.width * (self.height - 1 - y1) + bigger_x + 1)].fill(color);
-        self.image_data[(self.width * (self.height - 1 - y2) + smaller_x)..(self.width * (self.height - 1 - y2) + bigger_x + 1)].fill(color);
-        // draw vertical sides
-        for y in smaller_y..(bigger_y + 1) {
-            let base_location = self.width * (self.height - 1 - y);
-            self.image_data[base_location + smaller_x] = color;
-            self.image_data[base_location + bigger_x] = color;
-        }
+                    let limit_x = ((bigger_x - smaller_x) / 2) + 1;
+                    let limit_y = ((bigger_y - smaller_y) / 2) + 1;
+                    if (thickness > limit_x) || (thickness > limit_y) {
+                        used_thickness = min(limit_x, limit_y);
+                    }
 
-        // if thickness is more than one call this function again to draw an    other, smaller rectangle inside this one
-        if thickness > 1 {
-            self.draw_rectangle(smaller_x + 1, smaller_y + 1, bigger_x - 1, bigger_y - 1, color, thickness - 1);
-        }
-    }
+                    while used_thickness > 0 {
+                        used_thickness -= 1;
 
-    pub fn draw_rectangle_filled(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: [u8; 3],) {
+                        // draw horizontal sides
+                        self.image_data[(self.width * (self.height - 1 - smaller_y) + smaller_x)..(self.width * (self.height - 1 - smaller_y) + bigger_x + 1)].fill(color);
+                        self.image_data[(self.width * (self.height - 1 - bigger_y) + smaller_x)..(self.width * (self.height - 1 - bigger_y) + bigger_x + 1)].fill(color);
+                        // draw vertical sides
+                        for y in smaller_y..(bigger_y + 1) {
+                            let base_location = self.width * (self.height - 1 - y);
+                            self.image_data[base_location + smaller_x] = color;
+                            self.image_data[base_location + bigger_x] = color;
+                        }
 
-        if x1 >= self.width || x2 >= self.width || y1 >= self.height || y2 >= self.height {
-            // panic if any of the coordinates go out of the image
-            panic!("Given coordinates exceed image limits!");
-        }
-
-        // calculate which x, y is bigger to know how to properly index image_data
-        let smaller_x = min(x1, x2);
-        let bigger_x = max(x1, x2);
-        let smaller_y = min(y1, y2);
-        let bigger_y = max(y1, y2);
-        // draw line by line onto image (faster than regular draw rectangle with high thickness as it doesn't need to call function repeatedly to draw smaller rectangles)
-        for y in smaller_y..(bigger_y + 1) {
-            let base_location = self.width * (self.height - 1 - y);
-            self.image_data[(base_location + smaller_x)..(base_location + bigger_x + 1)].fill(color);
+                        smaller_x += 1;
+                        smaller_y += 1;
+                        bigger_x -= 1;
+                        bigger_y -= 1;
+                    }
+                } else {
+                    // TODO transparent rectangle, not filled
+                }
+            }
         }
     }
 

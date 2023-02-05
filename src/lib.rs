@@ -11,8 +11,7 @@ mod tests {
     fn main() {
         let mut img = ImageRGB8::from_png("test_image2.png").unwrap();
         img.clear();
-        let mut img2 = ImageRGB8::from_bytes(200, 200, img.to_bytes()).unwrap();
-        img2.draw_line(10, 10, 50, 150, [255, 255, 255]);
-        img2.to_png("test_image3.png").unwrap();
+        img.draw_rectangle(5, 5, 21, 11, [255, 255, 255], 0, 1.0);
+        img.to_png("test_image3.png").unwrap();
     }
 }
