@@ -284,8 +284,8 @@ impl ImageRGB8 {
                     // draws each pixel by blending it to the background (because of transparency)
                     let reverse_opacity = 1.0 - opacity;
                     for y in smaller_y..(bigger_y + 1) {
-                        let base_location = self.width * (self.height - 1 - y);
-                        for x in (base_location + smaller_x)..(base_location + bigger_x + 1) {
+                        let base_location = self.width * (self.height - 1 - y);  // base index of line
+                        for x in (base_location + smaller_x)..(base_location + bigger_x + 1) { // range of indexes on that line (horizontal line)
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
                                 self.image_data[x][channel] = ((self.image_data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
@@ -296,14 +296,16 @@ impl ImageRGB8 {
             } else {
                 if opacity >= 1.0 {
                     // Draw rectangle, solid
-                    let mut used_thickness = thickness;
 
+                    let mut used_thickness = thickness;  // new thickness variable
+                    // limits maximum thickness
                     let limit_x = ((bigger_x - smaller_x) / 2) + 1;
                     let limit_y = ((bigger_y - smaller_y) / 2) + 1;
                     if (thickness > limit_x) || (thickness > limit_y) {
                         used_thickness = min(limit_x, limit_y);
                     }
 
+                    // draw smaller and smaller rectangles until given thickness is achieved
                     while used_thickness > 0 {
                         used_thickness -= 1;
 
@@ -311,7 +313,7 @@ impl ImageRGB8 {
                         self.image_data[(self.width * (self.height - 1 - smaller_y) + smaller_x)..(self.width * (self.height - 1 - smaller_y) + bigger_x + 1)].fill(color);
                         self.image_data[(self.width * (self.height - 1 - bigger_y) + smaller_x)..(self.width * (self.height - 1 - bigger_y) + bigger_x + 1)].fill(color);
                         // draw vertical sides
-                        for y in smaller_y..(bigger_y + 1) {
+                        for y in (smaller_y + 1)..bigger_y {
                             let base_location = self.width * (self.height - 1 - y);
                             self.image_data[base_location + smaller_x] = color;
                             self.image_data[base_location + bigger_x] = color;
@@ -323,7 +325,49 @@ impl ImageRGB8 {
                         bigger_y -= 1;
                     }
                 } else {
-                    // TODO transparent rectangle, not filled
+                    // Draw rectangle, transparent
+
+                    let mut used_thickness = thickness; // new variable used for thickness
+                    // limits maximum thickness
+                    let limit_x = ((bigger_x - smaller_x) / 2) + 1;
+                    let limit_y = ((bigger_y - smaller_y) / 2) + 1;
+                    if (thickness > limit_x) || (thickness > limit_y) {
+                        used_thickness = min(limit_x, limit_y);
+                    }
+
+                    let reverse_opacity = 1.0 - opacity;  // no explicit meaning, just used as a value when blending (to reduce unnecessary calculations)
+
+                    while used_thickness > 0 {
+                        used_thickness -= 1;
+
+                        // draw horizontal sides
+                        for y in [smaller_y, bigger_y] {  // bottom and top side
+                            let base_location = self.width * (self.height - 1 - y);  // starting index of line where sides are
+                            for x in (base_location + smaller_x)..(base_location + bigger_x + 1) {  // pixels in those sides
+                                for channel in 0..color.len() {
+                                    // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                    self.image_data[x][channel] = ((self.image_data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
+                                }
+                            }
+                        }
+
+                        // draw vertical sides
+                        for y in (smaller_y + 1)..bigger_y {
+                            let base_location = self.width * (self.height - 1 - y);
+                            for x in [smaller_x, bigger_x] {
+                                let ind_location = base_location + x;
+                                for channel in 0..color.len() {
+                                    // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                    self.image_data[ind_location][channel] = ((self.image_data[ind_location][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
+                                }
+                            }
+                        }
+
+                        smaller_x += 1;
+                        smaller_y += 1;
+                        bigger_x -= 1;
+                        bigger_y -= 1;
+                    }
                 }
             }
         }
