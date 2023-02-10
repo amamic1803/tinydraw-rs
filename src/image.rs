@@ -377,83 +377,171 @@ impl ImageRGB8 {
 
     #[allow(clippy::collapsible_else_if)]
     pub fn draw_circle(&mut self, x: usize, y: usize, radius: usize, color: [u8; 3], thickness: usize, opacity: f64) {
+        //! description
 
-        if radius > 0 && opacity >= 0.0 {
+        if radius > 0 && opacity >= 0.0 && x < self.width && y < self.height {
             let x0: f64 = x as f64;
             let y0: f64 = y as f64;
             let radius_sqrd: f64 = radius.pow(2) as f64;
+            let y_upperlimit: usize = y + ((radius as f64) * FRAC_1_SQRT_2).floor() as usize + 1 - radius % 2;
 
-            for x_coord in x..(x + ((((radius as f64) * FRAC_1_SQRT_2).floor()) as usize) + 1 + radius % 2) {
-                let y_coord: f64 = y0 + (radius_sqrd - (x_coord as f64 - x0).powi(2)).sqrt();
+            if thickness == 0 {
+                if opacity >= 1.0 {
+                    // draw filled, solid circle
+                    let mut previous_y: usize = y + radius;
+                    for x_coord in x..(x + ((((radius as f64) * FRAC_1_SQRT_2).floor()) as usize) + 1 + radius % 2) {
+                        let y_coord: f64 = y0 + (radius_sqrd - (x_coord as f64 - x0).powi(2)).sqrt();
 
-                if (y_coord - y_coord.round()).abs() < 0.00001 {
-                    // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
-                    self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
-                    self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
-                    if x_coord != x {
-                        // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
-                        self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)] = color;
-                        self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)] = color;
+                        if (y_coord - y_coord.round()).abs() < 0.00001 {
+                            // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
+                            if x_coord == x {
+                                self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
+                                self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
+                            } else if y_coord.round() as usize > y_upperlimit {
+                                self.image_data[(self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord))..(self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord + 1)].fill(color);
+                                self.image_data[(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord))..(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord + 1)].fill(color);
+                                previous_y = y_coord.round() as usize;
+                            }
+                        } else {
+                            // split point between two pixels, and mirror to other 3 symmetric pixels
+                            let pix1_percentage: f64 = y_coord - y_coord.floor();
+                            let pix2_percentage: f64 = 1.0 - pix1_percentage;
+                            let pix1_ind: usize = self.width * (self.height - 1 - (y_coord.ceil() as usize)) + x_coord;
+                            let pix2_ind: usize = pix1_ind + self.width;
+                            for channel in 0..color.len() {
+                                // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                            }
+                            if (y_coord.ceil() as usize) < previous_y {
+                                self.image_data[(pix1_ind - 2 * (x_coord - x) + 1)..pix1_ind].fill(color);
+                                self.image_data[(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x) + 1)..(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width)].fill(color);
+                                previous_y = y_coord.ceil() as usize
+                            }
+                        }
                     }
+
+                    for y_coord in y..(y_upperlimit + 1) {
+                        let x_coord: f64 = x0 + (radius_sqrd - (y_coord as f64 - y0).powi(2)).sqrt();
+
+                        if (x_coord - x_coord.round()).abs() < 0.00001 {
+                            // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
+                            if y_coord == y {
+                                self.image_data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1)].fill(color);
+                            } else {
+                                self.image_data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + (x_coord.round() as usize) + 1)].fill(color);
+                                self.image_data[(self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - (2 * y - y_coord)) + (x_coord.round() as usize) + 1)].fill(color);
+                            }
+                        } else {
+                            // split point between two pixels, and mirror to other 3 symmetric pixels
+                            let pix1_percentage: f64 = x_coord - x_coord.floor();
+                            let pix2_percentage: f64 = 1.0 - pix1_percentage;
+                            let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
+                            for channel in 0..color.len() {
+                                // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                                let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
+                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                                temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
+                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                                temp_ind -= 2 * (x_coord.ceil() as usize - x);
+                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                            }
+                            self.image_data[(pix_ind - 2 * (x_coord.ceil() as usize - x) + 1)..pix_ind].fill(color);
+                            self.image_data[(pix_ind + 2 * (y_coord - y) * self.width - 2 * (x_coord.ceil() as usize - x) + 1)..(pix_ind + 2 * (y_coord - y) * self.width)].fill(color);
+                        }
+                    }
+
                 } else {
-                    // split point between two pixels, and mirror to other 3 symmetric pixels
-                    let pix1_percentage: f64 = y_coord - y_coord.floor();
-                    let pix2_percentage: f64 = 1.0 - pix1_percentage;
-                    let pix1_ind: usize = self.width * (self.height - 1 - (y_coord.ceil() as usize)) + x_coord;
-                    let pix2_ind: usize = pix1_ind + self.width;
-                    for channel in 0..color.len() {
-                        // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                        self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                        self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
-
-                        self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                        self.image_data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
-
-                        self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                        self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
-
-                        self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                        self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
-
-                    }
+                    // draw filled, transparent circle
                 }
-            }
+            } else {
+                if opacity >= 1.0 {
+                    // draw circle, solid
 
-            for y_coord in y..(y + ((radius as f64) * FRAC_1_SQRT_2).floor() as usize + 1 + 1 - radius % 2) {
-                let x_coord: f64 = x0 + (radius_sqrd - (y_coord as f64 - y0).powi(2)).sqrt();
+                    for x_coord in x..(x + ((((radius as f64) * FRAC_1_SQRT_2).floor()) as usize) + 1 + radius % 2) {
+                        let y_coord: f64 = y0 + (radius_sqrd - (x_coord as f64 - x0).powi(2)).sqrt();
 
-                if (x_coord - x_coord.round()).abs() < 0.00001 {
-                    // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
-                    self.image_data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize] = color;
-                    self.image_data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)] = color;
-                    if y_coord != y {
-                        // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
-                        self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize] = color;
-                        self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)] = color;
+                        if (y_coord - y_coord.round()).abs() < 0.00001 {
+                            // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
+                            self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
+                            self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
+                            if x_coord != x {
+                                // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
+                                self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)] = color;
+                                self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)] = color;
+                            }
+                        } else {
+                            // split point between two pixels, and mirror to other 3 symmetric pixels
+                            let pix1_percentage: f64 = y_coord - y_coord.floor();
+                            let pix2_percentage: f64 = 1.0 - pix1_percentage;
+                            let pix1_ind: usize = self.width * (self.height - 1 - (y_coord.ceil() as usize)) + x_coord;
+                            let pix2_ind: usize = pix1_ind + self.width;
+                            for channel in 0..color.len() {
+                                // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+
+                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+
+                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+
+                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+
+                            }
+                        }
+                    }
+
+                    for y_coord in y..(y + ((radius as f64) * FRAC_1_SQRT_2).floor() as usize + 1 + 1 - radius % 2) {
+                        let x_coord: f64 = x0 + (radius_sqrd - (y_coord as f64 - y0).powi(2)).sqrt();
+
+                        if (x_coord - x_coord.round()).abs() < 0.00001 {
+                            // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
+                            self.image_data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize] = color;
+                            self.image_data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)] = color;
+                            if y_coord != y {
+                                // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
+                                self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize] = color;
+                                self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)] = color;
+                            }
+                        } else {
+                            // split point between two pixels, and mirror to other 3 symmetric pixels
+                            let pix1_percentage: f64 = x_coord - x_coord.floor();
+                            let pix2_percentage: f64 = 1.0 - pix1_percentage;
+                            let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
+                            for channel in 0..color.len() {
+                                // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[pix_ind - 1][channel] = ((self.image_data[pix_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+
+                                let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
+                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+
+                                temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
+                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[temp_ind - 1][channel] = ((self.image_data[temp_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+
+                                temp_ind -= 2 * (x_coord.ceil() as usize - x);
+                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+
+                            }
+                        }
                     }
                 } else {
-                    // split point between two pixels, and mirror to other 3 symmetric pixels
-                    let pix1_percentage: f64 = x_coord - x_coord.floor();
-                    let pix2_percentage: f64 = 1.0 - pix1_percentage;
-                    let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
-                    for channel in 0..color.len() {
-                        // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                        self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                        self.image_data[pix_ind - 1][channel] = ((self.image_data[pix_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
-
-                        let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                        self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
-
-                        temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                        self.image_data[temp_ind - 1][channel] = ((self.image_data[temp_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
-
-                        temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                        self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
-
-                    }
+                    // draw circle, transparent
                 }
             }
         }
