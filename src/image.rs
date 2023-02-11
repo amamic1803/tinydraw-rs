@@ -17,11 +17,12 @@ fn rgb8_to_bytes(rgb8: &[[u8; 3]]) -> &[u8] {
 }
 
 enum BackgroundRGB8 {
+    // enum that holds image background information for ImageRGB8
     Color([u8; 3]),
     Image(Vec<[u8; 3]>)
 }
 
-
+/// A struct that holds an RGB image with bit depth of 8
 pub struct ImageRGB8 {
     /// The width of the image
     pub width: usize,
@@ -42,10 +43,10 @@ impl ImageRGB8 {
     }
 
     pub fn from_png(path: &str) -> Result<Self, &'static str> {
-        //! Reads image data from PNG file.
+        //! Reads the image from a PNG file.
         //! Returns [Result] which holds new [ImageRGB8] or [Err] with informative message.
-        //! ```path``` is the path to PNG file.
-        //! The PNG file should be RGB or RGBA with bit depth 8.
+        //! ```path``` is the path to the PNG file.
+        //! The PNG file should be RGB or RGBA with bit depth of 8.
 
         match File::open(path) {
             Ok(file) =>
@@ -111,9 +112,9 @@ impl ImageRGB8 {
     }
 
     pub fn to_png(&self, path: &str) -> Result<(), &'static str> {
-        //! Saves image as PNG.
+        //! Saves the image as PNG.
         //! ```path``` is a path + filename where it will be saved.
-        //! Returns ```Ok(())``` if everything goes well, or ```Err(&str)``` with description of the error.
+        //! Returns [Ok] if everything goes well, or [Err] with description of the error.
         let path = Path::new(path);
 
         match File::create(path) {
@@ -142,12 +143,12 @@ impl ImageRGB8 {
     }
 
     pub fn to_bytes(&self) -> &[u8] {
-        //! Returns a slice of bytes of ```image_data```
+        //! Returns a slice of bytes of the ```image_data```
         rgb8_to_bytes(&self.image_data)
     }
 
     pub fn get_pixel(&self, x: usize, y: usize) -> Result<[u8; 3], &'static str> {
-        //! Returns an RGB value of pixel with coordinates ```x``` and ```y``` if that pixel exists.
+        //! Returns an RGB value of the specified pixel if that pixel exists.
 
         if x >= self.width || y >= self.height {
             Err("Given coordinates exceed image limits!")
@@ -157,8 +158,8 @@ impl ImageRGB8 {
     }
 
     pub fn set_pixel(&mut self, x: usize, y: usize, color: [u8; 3]) {
-        //! Changes pixel with given coordinates to desired ```color```.
-        //! If that pixel doesn't exist, do nothing.
+        //! Changes the specified pixel to the given ```color```.
+        //! If the pixel doesn't exist, does nothing.
 
         if x < self.width || y < self.width {
             self.image_data[self.width * (self.height - 1 - y) + x] = color;
@@ -166,9 +167,7 @@ impl ImageRGB8 {
     }
 
     pub fn clear(&mut self) {
-        //! Clears ```image_data``` of any drawings (resets it to state it was in when [ImageRGB8] was created).
-        //! If image was created with [ImageRGB8::new()] it uses background color supplied there.
-        //! If image was created with [ImageRGB8::from_png()] or with [ImageRGB8::from_bytes()], another copy of original image is saved, which is used to clear ```image_data```.
+        //! Clears ```image_data``` of any drawings (resets it to the state it was in when [ImageRGB8] was created, unless [ImageRGB8::set_background_color()] was used).
 
         match &self.background_data {
             BackgroundRGB8::Color(color) => self.image_data.fill(*color),
@@ -177,70 +176,206 @@ impl ImageRGB8 {
     }
 
     pub fn set_background_color(&mut self, color: [u8; 3]) {
-        //! Set a new color that will be used as background.
-        //! Note that this only changes internal background data.
-        //! If you also want to apply this background (fill ```image_data``` with this color), call [ImageRGB8::clear()] after this.
+        //! Sets a new color that will be used as background.
+        //! This only changes internal background data, if you want to apply this to image, call [ImageRGB8::clear()] after this.
 
         self.background_data = BackgroundRGB8::Color(color);
     }
 
-    pub fn draw_line(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: [u8; 3]) {
-        // draws anti aliased line
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_line(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: [u8; 3], thickness: usize, opacity: f64) {
+        //! Draws a new line. `x1`, `y1` are coordinates of the starting point. `x2`, `y2` are coordinates of the ending point.
+        //! `color` defines the color of the line.
+        //! `thickness` defines how thick the line will be. (currently doesn't do anything). If set to 0, nothing will be drawn.
+        //! `opacity` sets the transparency of the line. `<= 0.0` means the line will be completely transparent, while `>= 1.0` means the line won't be transparent.
 
-        if x1 >= self.width || x2 >= self.width || y1 >= self.height || y2 >= self.height {
-            // panic if any of the coordinates go out of the image
-            panic!("Given coordinates exceed image limits!")
-        } else if x1 == x2 {
-            // if line is vertical just draw it
-            for y in y1..(y2 + 1) {
-                self.image_data[self.width * (self.height - 1 - y) + x1] = color;
-            }
-        } else {
-            // if line has slope use Xiaolin Wu's algorithm to draw it anti aliased
-            // if slope is more horizontal (<= 1), antialiasing with pixels above and below
-            // if slope is more vertical (> 1), antialiasing with pixels left and right
-            let slope: f64 = ((y1 as f64) - (y2 as f64)) / ((x1 as f64) - (x2 as f64));
-            if slope.abs() <= 1.0 {
-                for x in x1..(x2 + 1) {
-                    let y: f64 = slope * ((x - x1) as f64) + (y1 as f64);
-
-                    if (y - y.round()).abs() < 0.00001 {
-                        // if point is very close to integer, just draw it on that pixel
-                        self.image_data[self.width * (self.height - 1 - (y.round() as usize)) + x] = color;
-                    } else {
-                        // split point between two pixels
-                        let pix1_percentage: f64 = y - y.floor();
-                        let pix2_percentage: f64 = 1.0 - pix1_percentage;
-
-                        let pix1_ind: usize = self.width * (self.height - 1 - (y.ceil() as usize)) + x;
-                        let pix2_ind: usize = pix1_ind + self.width;
-
+        if (thickness != 0) && (opacity >= 0.0) {
+            if (x1 == x2) && (x1 < self.width) {
+                // if line is vertical just draw it
+                let lower_y: usize = if min(y1, y2) >= self.height {
+                    self.height - 1
+                } else {
+                    min(y1, y2)
+                };
+                let upper_y: usize = if max(y1, y2) >= self.height {
+                    self.height - 1
+                } else {
+                    max(y1, y2)
+                };
+                if opacity >= 1.0 {
+                    for y in lower_y..(upper_y + 1) {
+                        self.image_data[self.width * (self.height - 1 - y) + x1] = color;
+                    }
+                } else {
+                    for y in lower_y..(upper_y + 1) {
                         for channel in 0..color.len() {
-                            // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                            self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                            self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                            self.image_data[self.width * (self.height - 1 - y) + x1][channel] = ((self.image_data[self.width * (self.height - 1 - y) + x1][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                        }
+                    }
+                }
+            } else if (y1 == y2) && (y1 < self.height) {
+                // if line is horizontal, just draw it
+                let lower_x: usize = if min(x1, x2) >= self.height {
+                    self.height - 1
+                } else {
+                    min(x1, x2)
+                };
+                let upper_x: usize = if max(x1, x2) >= self.height {
+                    self.height - 1
+                } else {
+                    max(x1, x2)
+                };
+                let row: usize = self.width * (self.height - 1 - y1);
+                if opacity >= 1.0 {
+                    self.image_data[(row + lower_x)..(row + upper_x + 1)].fill(color);
+                } else {
+                    for ind in (row + lower_x)..(row + upper_x + 1) {
+                        for channel in 0..color.len() {
+                            self.image_data[ind][channel] = ((self.image_data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                         }
                     }
                 }
             } else {
-                for y in y1..(y2 + 1) {
-                    let x: f64 = (((y - y1) as f64) / slope) + (x1 as f64);
-
-                    if (x - x.round()).abs() < 0.00001 {
-                        // if point is very close to integer, just draw it on that pixel
-                        self.image_data[self.width * (self.height - 1 - y) + (x.round() as usize)] = color;
+                // line is diagonal here
+                let slope: f64 = ((y1 as f64) - (y2 as f64)) / ((x1 as f64) - (x2 as f64));
+                let mut x1_calc: usize = x1;
+                let mut x2_calc: usize = x2;
+                let mut y1_calc: usize = y1;
+                let mut y2_calc: usize = y2;
+                if (x1 >= self.width) && (y1 >= self.height) {
+                    let y_temp: usize = self.height - 1;
+                    let x_temp: usize = ((((y_temp as f64) - (y1 as f64)) / slope) + (x1 as f64)).floor() as usize;
+                    if x_temp >= self.width {
+                        let x_temp: usize = self.width - 1;
+                        let y_temp: usize = (slope * ((x_temp as f64) - (x1 as f64)) + (y1 as f64)).floor() as usize;
+                        if y_temp >= self.height {
+                            return
+                        } else {
+                            x1_calc = x_temp;
+                            y1_calc = y_temp;
+                        }
                     } else {
-                        // split point between two pixels
-                        let pix1_percentage: f64 = x.ceil() - x;
-                        let pix2_percentage: f64 = 1.0 - pix1_percentage;
-
-                        let pix1_ind: usize = self.width * (self.height - 1 - y) + (x.floor() as usize);
-                        let pix2_ind: usize = pix1_ind + 1;
-
-                        for channel in 0..color.len() {
-                            // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                            self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                            self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                        x1_calc = x_temp;
+                        y1_calc = y_temp;
+                    }
+                } else if x1 >= self.width {
+                    let x_temp: usize = self.width - 1;
+                    let y_temp: usize = (slope * ((x_temp as f64) - (x1 as f64)) + (y1 as f64)).floor() as usize;
+                    if y_temp >= self.height {
+                        return
+                    } else {
+                        x1_calc = x_temp;
+                        y1_calc = y_temp;
+                    }
+                } else if y1 >= self.height {
+                    let y_temp: usize = self.height - 1;
+                    let x_temp: usize = ((((y_temp as f64) - (y1 as f64)) / slope) + (x1 as f64)).floor() as usize;
+                    if x_temp >= self.width {
+                        return
+                    } else {
+                        x1_calc = x_temp;
+                        y1_calc = y_temp;
+                    }
+                }
+                if (x2 >= self.width) && (y2 >= self.height) {
+                    let y_temp: usize = self.height - 1;
+                    let x_temp: usize = ((((y_temp as f64) - (y1 as f64)) / slope) + (x1 as f64)).floor() as usize;
+                    if x_temp >= self.width {
+                        let x_temp: usize = self.width - 1;
+                        let y_temp: usize = (slope * ((x_temp as f64) - (x1 as f64)) + (y1 as f64)).floor() as usize;
+                        if y_temp >= self.height {
+                            return
+                        } else {
+                            x2_calc = x_temp;
+                            y2_calc = y_temp;
+                        }
+                    } else {
+                        x2_calc = x_temp;
+                        y2_calc = y_temp;
+                    }
+                } else if x2 >= self.width {
+                    let x_temp: usize = self.width - 1;
+                    let y_temp: usize = (slope * ((x_temp as f64) - (x1 as f64)) + (y1 as f64)).floor() as usize;
+                    if y_temp >= self.height {
+                        return
+                    } else {
+                        x2_calc = x_temp;
+                        y2_calc = y_temp;
+                    }
+                } else if y2 >= self.height {
+                    let y_temp: usize = self.height - 1;
+                    let x_temp: usize = ((((y_temp as f64) - (y1 as f64)) / slope) + (x1 as f64)).floor() as usize;
+                    if x_temp >= self.width {
+                        return
+                    } else {
+                        x2_calc = x_temp;
+                        y2_calc = y_temp;
+                    }
+                }
+                if (x1_calc == x2_calc) && (y1_calc == y2_calc) {
+                    return
+                }
+                // if line has slope use Xiaolin Wu's algorithm to draw it anti aliased
+                // if slope is more horizontal (<= 1), antialiasing with pixels above and below
+                // if slope is more vertical (> 1), antialiasing with pixels left and right
+                if slope.abs() <= 1.0 {
+                    for x in min(x1_calc, x2_calc)..(max(x1_calc, x2_calc) + 1) {
+                        let y: f64 = slope * ((x - x1) as f64) + (y1 as f64);
+                        if (y - y.round()).abs() < 0.00001 {
+                            // if point is very close to integer, just draw it on that pixel
+                            if opacity >= 1.0 {
+                                self.image_data[self.width * (self.height - 1 - (y.round() as usize)) + x] = color;
+                            } else {
+                                let ind: usize = self.width * (self.height - 1 - (y.round() as usize)) + x;
+                                for channel in 0..color.len() {
+                                    self.image_data[ind][channel] = ((self.image_data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                }
+                            }
+                        } else {
+                            // split point between two pixels
+                            let mut pix1_percentage: f64 = y - y.floor();
+                            let mut pix2_percentage: f64 = 1.0 - pix1_percentage;
+                            if opacity < 1.0 {
+                                pix1_percentage *= opacity;
+                                pix2_percentage *= opacity
+                            }
+                            let pix1_ind: usize = self.width * (self.height - 1 - (y.ceil() as usize)) + x;
+                            let pix2_ind: usize = pix1_ind + self.width;
+                            for channel in 0..color.len() {
+                                // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                            }
+                        }
+                    }
+                } else {
+                    for y in min(y1_calc, y2_calc)..(max(y1_calc, y2_calc) + 1) {
+                        let x: f64 = (((y - y1) as f64) / slope) + (x1 as f64);
+                        if (x - x.round()).abs() < 0.00001 {
+                            // if point is very close to integer, just draw it on that pixel
+                            if opacity >= 1.0 {
+                                self.image_data[self.width * (self.height - 1 - y) + (x.round() as usize)] = color;
+                            } else {
+                                let ind: usize = self.width * (self.height - 1 - y) + (x.round() as usize);
+                                for channel in 0..color.len() {
+                                    self.image_data[ind][channel] = ((self.image_data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                }
+                            }
+                        } else {
+                            // split point between two pixels
+                            let mut pix1_percentage: f64 = x.ceil() - x;
+                            let mut pix2_percentage: f64 = 1.0 - pix1_percentage;
+                            if opacity < 1.0 {
+                                pix1_percentage *= opacity;
+                                pix2_percentage *= opacity
+                            }
+                            let pix1_ind: usize = self.width * (self.height - 1 - y) + (x.floor() as usize);
+                            let pix2_ind: usize = pix1_ind + 1;
+                            for channel in 0..color.len() {
+                                // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                            }
                         }
                     }
                 }
@@ -251,12 +386,10 @@ impl ImageRGB8 {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::collapsible_else_if)]
     pub fn draw_rectangle(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: [u8; 3], thickness: usize, opacity: f64) {
-        //! Draws rectangle. `x1`, `y1` are coordinates of first corner, and `x2`, `y2` are coordinates of opposite corner.
-        //! `color` defines color of rectangle.
-        //! `thickness` defines how thick rectangle will be. (thickness is added to the inside of the rectangle).
-        //! If set to 0, rectangle will be filled.
-        //! `opacity` sets whether rectangle will be transparent.
-        //! `<= 0.0` means rectangle will be completely transparent, while `>= 1.0` above means rectangle won't be transparent.
+        //! Draws a new rectangle. `x1`, `y1` are the coordinates of the first corner, and `x2`, `y2` are the coordinates of the opposite corner.
+        //! `color` defines the color of the rectangle.
+        //! `thickness` defines how thick the rectangle will be. (thickness is added to the inside of the rectangle). If set to 0, the rectangle will be filled.
+        //! `opacity` sets the transparency of the rectangle. `<= 0.0` means the rectangle will be completely transparent, while `>= 1.0` means the rectangle won't be transparent.
 
         // if opacity is 0.0, or less, then rectangle is transparent, nothing is to be drawn.
         if opacity >= 0.0 {
@@ -377,20 +510,33 @@ impl ImageRGB8 {
 
     #[allow(clippy::collapsible_else_if)]
     pub fn draw_circle(&mut self, x: usize, y: usize, radius: usize, color: [u8; 3], thickness: usize, opacity: f64) {
-        //! description
+        //! Draws a new circle. `x`, `y` are the coordinates of the center of the circle.
+        //! `radius` defines the radius of the circle.
+        //! `color` defines the color of the circle.
+        //! `thickness` defines how thick the circle will be. (currently doesn't do anything). If set to 0, the circle will be filled.
+        //! `opacity` sets the transparency of the circle.
+        //! `<= 0.0` means the circle will be completely transparent, while `>= 1.0` means the circle won't be transparent.
 
-        if radius > 0 && opacity >= 0.0 && x < self.width && y < self.height {
+        if (radius > 0) && (opacity >= 0.0) && (x < self.width) && (y < self.height) && (x >= radius) && (y >= radius) && (x + radius < self.width) && (y + radius < self.height) {
             let x0: f64 = x as f64;
             let y0: f64 = y as f64;
             let radius_sqrd: f64 = radius.pow(2) as f64;
-            let y_upperlimit: usize = y + ((radius as f64) * FRAC_1_SQRT_2).floor() as usize + 1 - radius % 2;
 
             if thickness == 0 {
                 if opacity >= 1.0 {
-                    // draw filled, solid circle
+                    // DRAW FILLED SOLID CIRCLE
+
+                    let x_upperlimit: usize = x + ((((radius as f64) * FRAC_1_SQRT_2).round()) as usize);  // x up to which draw adjacent pixels vertically
+                    let mut y_upperlimit: usize = 0;  // y up to which draw adjacent pixels horizontally (is initialized to 0, but is changed later)
+
+                    // for every x, calculate y and draw outer pixel, connecting inner pixels with solid line (for filling circle)
                     let mut previous_y: usize = y + radius;
-                    for x_coord in x..(x + ((((radius as f64) * FRAC_1_SQRT_2).floor()) as usize) + 1 + radius % 2) {
+                    for x_coord in x..(x_upperlimit + 1) {
                         let y_coord: f64 = y0 + (radius_sqrd - (x_coord as f64 - x0).powi(2)).sqrt();
+
+                        if x_coord == x_upperlimit {
+                            y_upperlimit = y_coord.floor() as usize;
+                        }
 
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
@@ -407,7 +553,6 @@ impl ImageRGB8 {
                             let pix1_percentage: f64 = y_coord - y_coord.floor();
                             let pix2_percentage: f64 = 1.0 - pix1_percentage;
                             let pix1_ind: usize = self.width * (self.height - 1 - (y_coord.ceil() as usize)) + x_coord;
-                            let pix2_ind: usize = pix1_ind + self.width;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
                                 self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
@@ -426,6 +571,7 @@ impl ImageRGB8 {
                         }
                     }
 
+                    // for every y, calculate x and draw outer pixel, connecting inner pixels with solid line (for filling circle)
                     for y_coord in y..(y_upperlimit + 1) {
                         let x_coord: f64 = x0 + (radius_sqrd - (y_coord as f64 - y0).powi(2)).sqrt();
 
@@ -461,14 +607,22 @@ impl ImageRGB8 {
                     }
 
                 } else {
-                    // draw filled, transparent circle
+                    // DRAW FILLED TRANSPARENT CIRCLE
                 }
             } else {
                 if opacity >= 1.0 {
-                    // draw circle, solid
+                    // DRAW SOLID CIRCLE
 
-                    for x_coord in x..(x + ((((radius as f64) * FRAC_1_SQRT_2).floor()) as usize) + 1 + radius % 2) {
+                    let x_upperlimit: usize = x + ((((radius as f64) * FRAC_1_SQRT_2).round()) as usize);  // x up to which draw adjacent pixels vertically
+                    let mut y_upperlimit: usize = 0;  // y up to which draw adjacent pixels horizontally (is initialized to 0, but is changed later)
+
+                    // for every x, calculate y and split between top and bottom pixel
+                    for x_coord in x..(x_upperlimit + 1) {
                         let y_coord: f64 = y0 + (radius_sqrd - (x_coord as f64 - x0).powi(2)).sqrt();
+
+                        if x_coord == x_upperlimit {
+                            y_upperlimit = y_coord.floor() as usize;
+                        }
 
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
@@ -503,7 +657,8 @@ impl ImageRGB8 {
                         }
                     }
 
-                    for y_coord in y..(y + ((radius as f64) * FRAC_1_SQRT_2).floor() as usize + 1 + 1 - radius % 2) {
+                    // for every y, calculate x and split between left and right pixel (up to y_upperlimit - 1 as it is a special case handled separately)
+                    for y_coord in y..y_upperlimit {
                         let x_coord: f64 = x0 + (radius_sqrd - (y_coord as f64 - y0).powi(2)).sqrt();
 
                         if (x_coord - x_coord.round()).abs() < 0.00001 {
@@ -540,11 +695,39 @@ impl ImageRGB8 {
                             }
                         }
                     }
-                } else {
-                    // draw circle, transparent
 
-                    for x_coord in x..(x + ((((radius as f64) * FRAC_1_SQRT_2).floor()) as usize) + 1 + radius % 2) {
+                    // special case when y = y_upperlimit, draw only outer pixel (as inner was already filled with something in x loop)
+                    let x_coord: f64 = x0 + (radius_sqrd - (y_upperlimit as f64 - y0).powi(2)).sqrt();
+                    let pix1_percentage: f64 = x_coord - x_coord.floor();
+                    let pix2_percentage: f64 = 1.0 - pix1_percentage;
+                    let pix_ind: usize = self.width * (self.height - 1 - y_upperlimit) + x_coord.ceil() as usize;
+                    for channel in 0..color.len() {
+                        // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                        self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                        let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
+                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                        temp_ind = pix_ind + 2 * (y_upperlimit - y) * self.width;
+                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                        temp_ind -= 2 * (x_coord.ceil() as usize - x);
+                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                    }
+
+                } else {
+                    // DRAW TRANSPARENT CIRCLE
+
+                    let x_upperlimit: usize = x + ((((radius as f64) * FRAC_1_SQRT_2).round()) as usize);  // x up to which draw adjacent pixels vertically
+                    let mut y_upperlimit: usize = 0;  // y up to which draw adjacent pixels horizontally (is initialized to 0, but is changed later)
+
+                    // for every x, calculate y and split between top and bottom pixel
+                    for x_coord in x..(x_upperlimit + 1) {
                         let y_coord: f64 = y0 + (radius_sqrd - (x_coord as f64 - x0).powi(2)).sqrt();
+
+                        if x_coord == x_upperlimit {
+                            y_upperlimit = y_coord.floor() as usize;
+                        }
 
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
@@ -583,7 +766,8 @@ impl ImageRGB8 {
                         }
                     }
 
-                    for y_coord in y..(y + ((radius as f64) * FRAC_1_SQRT_2).floor() as usize + 1 + 1 - radius % 2) {
+                    // for every y, calculate x and split between left and right pixel (up to y_upperlimit - 1 as it is a special case handled separately)
+                    for y_coord in y..y_upperlimit {
                         let x_coord: f64 = x0 + (radius_sqrd - (y_coord as f64 - y0).powi(2)).sqrt();
 
                         if (x_coord - x_coord.round()).abs() < 0.00001 {
@@ -623,6 +807,24 @@ impl ImageRGB8 {
 
                             }
                         }
+                    }
+
+                    // special case when y = y_upperlimit, draw only outer pixel (as inner was already filled with something in x loop)
+                    let x_coord: f64 = x0 + (radius_sqrd - (y_upperlimit as f64 - y0).powi(2)).sqrt();
+                    let pix1_percentage: f64 = (x_coord - x_coord.floor()) * opacity;
+                    let pix_ind: usize = self.width * (self.height - 1 - y_upperlimit) + x_coord.ceil() as usize;
+                    for channel in 0..color.len() {
+                        // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
+                        self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                        let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
+                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                        temp_ind = pix_ind + 2 * (y_upperlimit - y) * self.width;
+                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+
+                        temp_ind -= 2 * (x_coord.ceil() as usize - x);
+                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                     }
                 }
             }
