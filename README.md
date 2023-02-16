@@ -54,20 +54,21 @@ This code generates the following image:
 - only RGB images with bit depth of 8 are currently supported
 
 ## Dependencies
-https://crates.io/crates/bytemuck (reading, exporting bytes)
+[bytemuck](https://crates.io/crates/bytemuck) (reading, exporting bytes)
 
-https://crates.io/crates/png (reading, exporting PNG)
+[png](https://crates.io/crates/png) (reading, exporting PNG)
 
 ## Development
 I intend to fix the limitations and perhaps add more shapes in the future.
 It depends on my free time and whether there will be any interest for this crate.
-If you have any suggestions, feel free to open an issue. Or if you want to contribute, feel free to open a pull request.
+If you encounter a bug or have any suggestions, feel free to open an issue.
+If you want to contribute, feel free to open a pull request.
 
 ## References
-https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
+[Wikipedia - Xiaolin Wu's line algorithm](https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm)
 
-https://www.geeksforgeeks.org/anti-aliased-line-xiaolin-wus-algorithm/
+[GeeksforGeeks - Anti-aliased Line | Xiaolin Wu’s algorithm](https://www.geeksforgeeks.org/anti-aliased-line-xiaolin-wus-algorithm/)
 
-https://create.stephan-brumme.com/antialiased-circle/
+[Stephan Brumme - Drawing Antialiased Circles and Ellipses](https://create.stephan-brumme.com/antialiased-circle/)
 
-https://yellowsplash.wordpress.com/2009/10/23/fast-antialiased-circles-and-ellipses-from-xiaolin-wus-concepts/
+[David Moksha - Fast, Antialiased Circles and Ellipses from Xiaolin Wu’s concepts](https://yellowsplash.wordpress.com/2009/10/23/fast-antialiased-circles-and-ellipses-from-xiaolin-wus-concepts/)
