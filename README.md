@@ -7,13 +7,13 @@
 It is a simple crate used for drawing basic, anti-aliased shapes, written in pure Rust.
 Supports reading and exporting images as PNG or bytes.
 
+[Documentation](https://docs.rs/tinydraw/latest/tinydraw/ "docs.rs")
+
 ### Available Shapes
 - line
 - rectangle
 - circle
 - ellipse
-
-[Documentation](https://docs.rs/tinydraw/latest/tinydraw/ "docs.rs")
 
 ### Example
 ```rust
@@ -41,20 +41,28 @@ This code generates the following image:
 
 ![image](https://user-images.githubusercontent.com/40371578/219385956-1691f210-7197-4b5e-94aa-ed76ac84787e.png)
 
-
 ### Limitations
-- circle and ellipse 
-  - won't draw if any part of them goes out of the image bounds
-  - thickness above 1 doesn't work (but 0 (filled) works!)
-- colorspace
-  - only RGB  with bit depth of 8 is currently supported
+- thickness above 1 doesn't work for:
+  - line
+  - circle
+  - ellipse
+- coordinates exceeding the image bounds don't work for:
+  - rectangle
+  - circle
+  - ellipse
+- only RGB images with bit depth of 8 are currently supported
 
 ## Dependencies
 https://crates.io/crates/bytemuck (reading, exporting bytes)
 
 https://crates.io/crates/png (reading, exporting PNG)
 
-## Links
+## Development
+I intend to fix the limitations and perhaps add more shapes in the future.
+It depends on my free time and whether there will be any interest for this crate.
+If you have any suggestions, feel free to open an issue. Or if you want to contribute, feel free to open a pull request.
+
+## References
 https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
 
 https://www.geeksforgeeks.org/anti-aliased-line-xiaolin-wus-algorithm/
