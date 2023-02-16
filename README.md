@@ -1,5 +1,31 @@
 # tinydraw-rs
-A small 2D drawing library in Rust
+
+**tinydraw** is a small library for 2D drawing in Rust
+
+---
+
+It is a simple crate used for drawing basic, anti-aliased shapes, written in pure Rust.
+Supports reading and exporting images as PNG or bytes.
+
+#### Available Shapes
+- line
+- rectangle
+- circle
+- ellipse
+
+
+
+## Limitations
+- circle and ellipse 
+  - won't draw if any part of them goes out of the image bounds
+  - thickness above 1 doesn't work (but 0 (filled) works!)
+- colorspace
+  - only RGB  with bit depth of 8 is currently supported
+
+## Dependencies
+https://crates.io/crates/bytemuck (reading, exporting bytes)
+
+https://crates.io/crates/png (reading, saving as PNG)
 
 ## Links
 https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
