@@ -4,10 +4,12 @@
 
 ---
 
-It is a simple crate used for drawing basic, anti-aliased shapes, written in pure Rust.
-Supports reading and exporting images as PNG or bytes.
+It's a simple crate used for drawing basic, anti-aliased shapes onto images, written in pure Rust.
 
-[Documentation](https://docs.rs/tinydraw/latest/tinydraw/ "docs.rs")
+Support for reading and exporting images as PNG or bytes is included ([dependencies](#dependencies)).
+
+
+[**Documentation**](https://docs.rs/tinydraw/latest/tinydraw/ "docs.rs")
 
 ### Available Shapes
 - line
