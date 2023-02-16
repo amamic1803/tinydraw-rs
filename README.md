@@ -7,7 +7,7 @@
 It is a simple crate used for drawing basic, anti-aliased shapes, written in pure Rust.
 Supports reading and exporting images as PNG or bytes.
 
-#### Available Shapes
+### Available Shapes
 - line
 - rectangle
 - circle
