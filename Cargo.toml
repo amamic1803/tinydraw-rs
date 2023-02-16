@@ -1,6 +1,6 @@
 [package]
 name = "tinydraw"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Antonio Mamić <mmima191@gmail.com>"]
 edition = "2021"
 description = "A small library for 2D drawing in Rust"
@@ -8,7 +8,7 @@ readme = "README.md"
 repository = "https://github.com/DarkLord76865/tinydraw-rs"
 license = "MIT"
 keywords = ["2d", "drawing", "graphics", "rendering", "images"]
-categories = ["graphics", "images", "rendering"]
+categories = ["graphics", "rendering"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
