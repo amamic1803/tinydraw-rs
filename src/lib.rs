@@ -3,7 +3,7 @@
 //! Support for reading and exporting images as PNG or bytes is included.
 //!
 //! Example usage:
-//! ```
+//! ```rust
 //! use tinydraw::ImageRGB8;
 //!
 //! let background_color: [u8; 3] = [255, 155, 0];
@@ -20,7 +20,8 @@
 //! image.draw_ellipse(319, 90, 80, 30, [255, 255, 255], 0, 1.0);
 //! image.draw_ellipse(319, 90, 60, 20, [0, 0, 0], 0, 1.0);
 //!
-//! image.to_png("image.png").unwrap();
+//! let bytes: &[u8] = image.to_bytes(); // get image as bytes
+//! // image.to_png("image.png").unwrap(); // export image as PNG
 //! ```
 //!
 //! **Shapes:** line, rectangle, ellipse, circle
@@ -57,6 +58,7 @@ mod tests {
         image.draw_ellipse(319, 90, 80, 30, [255, 255, 255], 0, 1.0);
         image.draw_ellipse(319, 90, 60, 20, [0, 0, 0], 0, 1.0);
 
+        let _bytes: &[u8] = image.to_bytes();
         // image.to_png("image.png").unwrap();
     }
 }
