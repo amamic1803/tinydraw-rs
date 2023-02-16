@@ -10,6 +10,8 @@ Support for reading and exporting images as PNG or bytes is included ([dependenc
 
 [**Documentation**](https://docs.rs/tinydraw/latest/tinydraw/ "docs.rs")
 
+[**Crate**](https://crates.io/crates/tinydraw "crates.io")
+
 ### Available Shapes
 - line
 - rectangle
