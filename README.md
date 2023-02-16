@@ -39,6 +39,8 @@ fn main() {
 ```
 This code generates the following image:
 
+![image](https://user-images.githubusercontent.com/40371578/219385956-1691f210-7197-4b5e-94aa-ed76ac84787e.png)
+
 
 ### Limitations
 - circle and ellipse 
