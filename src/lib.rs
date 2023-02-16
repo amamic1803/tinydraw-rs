@@ -10,16 +10,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn main() {
-        let mut img = ImageRGB8::new(200, 200, [25, 200, 25]);
-        // img.draw_circle(100, 100, 11, [255, 255, 255], 0, 1.0);
-        img.draw_circle(100, 100, 25, [255, 255, 255], 0, 0.5);
-        img.clear();
-        img.draw_ellipse(100, 100, 10, 50, [255, 255, 255], 1, 1.0);
-        img.draw_circle(50, 100, 10, [255, 255, 255], 1, 1.0);
-        // img.draw_line(50, 50, 125, 150, [255, 255, 255], 1, 1.0);
-        // img.draw_rectangle(25,  25, 175, 175, [255, 255, 255], 5, 0.5);
-        // img.clear();
-        img.to_png("test_image3.png").unwrap();
+    fn drawing_1() {
+        let background_color: [u8; 3] = [255, 155, 0];
+        let mut image: ImageRGB8 = ImageRGB8::new(640, 360, background_color);
+
+        image.draw_line(0, 0, 639, 359, [255, 255, 255], 1, 1.0);
+        image.draw_line(0, 359, 639, 0, [255, 255, 255], 1, 1.0);
+
+        image.draw_rectangle(0, 0, 639, 359, [255, 255, 255], 3, 1.0);
+
+        image.draw_ellipse(319, 179, 300, 150, [0, 0, 0], 0, 0.5);
+
+        image.draw_circle(149, 179, 30, [255, 255, 255], 0, 1.0);
+        image.draw_circle(149, 179, 20, [0, 0, 0], 0, 1.0);
+
+        image.draw_circle(489, 179, 30, [255, 255, 255], 0, 1.0);
+        image.draw_circle(489, 179, 20, [0, 0, 0], 0, 1.0);
+
+
+        image.draw_ellipse(319, 90, 80, 30, [255, 255, 255], 0, 1.0);
+        image.draw_ellipse(319, 90, 60, 20, [0, 0, 0], 0, 1.0);
+
+        image.to_png("image.png").unwrap();
     }
 }

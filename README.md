@@ -13,9 +13,34 @@ Supports reading and exporting images as PNG or bytes.
 - circle
 - ellipse
 
+[Documentation](https://docs.rs/tinydraw/latest/tinydraw/ "docs.rs")
+
+### Example
+```rust
+use tinydraw::ImageRGB8;
+
+fn main() { 
+    let background_color: [u8; 3] = [255, 155, 0];
+    let mut image: ImageRGB8 = ImageRGB8::new(640, 360, background_color);
+  
+    image.draw_line(0, 0, 639, 359, [255, 255, 255], 1, 1.0);
+    image.draw_line(0, 359, 639, 0, [255, 255, 255], 1, 1.0);
+    image.draw_rectangle(0, 0, 639, 359, [255, 255, 255], 3, 1.0);
+    image.draw_ellipse(319, 179, 300, 150, [0, 0, 0], 0, 0.5);
+    image.draw_circle(149, 179, 30, [255, 255, 255], 0, 1.0);
+    image.draw_circle(149, 179, 20, [0, 0, 0], 0, 1.0);
+    image.draw_circle(489, 179, 30, [255, 255, 255], 0, 1.0);
+    image.draw_circle(489, 179, 20, [0, 0, 0], 0, 1.0);
+    image.draw_ellipse(319, 90, 80, 30, [255, 255, 255], 0, 1.0);
+    image.draw_ellipse(319, 90, 60, 20, [0, 0, 0], 0, 1.0);
+  
+    image.to_png("image.png").unwrap();
+}
+```
+This code generates the following image:
 
 
-## Limitations
+### Limitations
 - circle and ellipse 
   - won't draw if any part of them goes out of the image bounds
   - thickness above 1 doesn't work (but 0 (filled) works!)
@@ -25,7 +50,7 @@ Supports reading and exporting images as PNG or bytes.
 ## Dependencies
 https://crates.io/crates/bytemuck (reading, exporting bytes)
 
-https://crates.io/crates/png (reading, saving as PNG)
+https://crates.io/crates/png (reading, exporting PNG)
 
 ## Links
 https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
