@@ -1,3 +1,5 @@
+//! A module that contains the [ImageRGB8] struct and related functions.
+
 use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
