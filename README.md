@@ -4,8 +4,7 @@
 
 ---
 
-It's a simple crate used for drawing basic, anti-aliased shapes onto images, written in pure Rust.
-
+It's a simple crate used for drawing basic, anti-aliased shapes onto images, written in pure Rust. 
 Support for reading and exporting images as PNG or bytes is included ([dependencies](#dependencies)).
 
 
