@@ -3,19 +3,27 @@
 use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
-use bytemuck::try_cast_slice;
 use std::cmp::{min, max};
 use std::f64::consts::FRAC_1_SQRT_2;
 
 
 fn bytes_to_rgb8(bytes: &[u8]) -> Vec<[u8; 3]> {
     // converts a slice of bytes to a vector of pixels
-    try_cast_slice::<u8, [u8; 3]>(bytes).expect("This shouldn't fail!").to_vec()
+    assert_eq!(bytes.len() % 3, 0);
+    let slice: *const [[u8; 3]] = core::ptr::slice_from_raw_parts(
+        bytes.as_ptr() as *const [u8; 3],
+        bytes.len() / 3,
+    );
+    unsafe { (*slice).to_vec() }
 }
 
 fn rgb8_to_bytes(rgb8: &[[u8; 3]]) -> &[u8] {
     // returns a slice of bytes of a vector (slice) of pixels
-    try_cast_slice(rgb8).expect("This shouldn't fail!")
+    let slice: *const [u8] = core::ptr::slice_from_raw_parts(
+        data.as_ptr() as *const u8,
+        data.len() * 3,
+    );
+    unsafe { &*slice }
 }
 
 enum BackgroundRGB8 {

@@ -12,6 +12,8 @@ categories = ["graphics", "rendering"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+lto = true
+
 [dependencies]
 png = "0.17.7"
-bytemuck = "1.13.0"
