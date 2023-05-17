@@ -13,4 +13,7 @@ categories = ["graphics", "rendering"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-png = "0.17.7"
+png = { version="0.17.7", optional=true }
+
+[features]
+image_io = ["dep:png"]

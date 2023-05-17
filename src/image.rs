@@ -1,11 +1,13 @@
 //! A module that contains the [Image] struct and related functions.
 
-use std::path::Path;
-use std::fs::File;
-use std::io::BufWriter;
+use std::any::TypeId;
 use std::cmp::{min, max};
 use std::f64::consts::FRAC_1_SQRT_2;
+use std::fs::File;
+use std::io::BufWriter;
 use std::ops::{Bound, RangeBounds};
+use std::path::Path;
+use std::ptr::slice_from_raw_parts;
 
 
 #[derive(Debug)]
@@ -20,23 +22,21 @@ pub struct Image<T> {
     /// The type of the image
     pub image_type: ImageType,
     /// The background of the image
-    background_data: BackgroundData
+    background_data: BackgroundData<T>
 }
 
 
 #[derive(Debug)]
-/// An enum that holds the image type information for [Image]
+/// An enum that holds the image type information
 pub enum ImageType {
+    /// An image with 8-bit RGB pixels
     RGB8,
+    /// An image with 8-bit RGB pixels + 8-bit alpha channel
     RGBA8,
+    /// An image with 16-bit RGB pixels
     RGB16,
+    /// An image with 16-bit RGB pixels + 16-bit alpha channel
     RGBA16,
-    RGB32,
-    RGBA32,
-    RGB64,
-    RGBA64,
-    RGB128,
-    RGBA128,
 }
 
 #[derive(Debug)]
@@ -48,21 +48,25 @@ pub enum IndexingError {
 
 #[derive(Debug)]
 /// An enum that holds the error information for [IO] trait
-pub enum IOError {}
+pub enum IOError {
+    InvalidSize,
+    UnsupportedFormat,
+}
 
 #[derive(Debug)]
 /// An enum that holds the background information for [Image]
-enum BackgroundData {
+enum BackgroundData<T> {
     /// The background is a color
-    Color([u8; 3]),
+    Color(T),
     /// The background is an image
-    Image(Vec<[u8; 3]>)
+    Image(Vec<T>)
 }
 
 
+/// A trait for indexing into image data
 trait Indexing<T>
 where
-    T: Copy,
+    T: Copy + PartialEq + Eq + 'static,
 {
     fn index(&self, index: (usize, usize)) -> Result<usize, IndexingError>;
     fn index_unchecked(&self, index: (usize, usize)) -> usize;
@@ -78,14 +82,18 @@ where
     fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T);
 }
 
-trait IO<T>
+/// A trait for image input/output
+pub trait IO<T>
 where
-    T: Copy
+    T: Copy + PartialEq + Eq + 'static,
 {
     fn new(width: usize, height: usize, background: T) -> Self;
-    fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Self;
-    fn from_png(path: &str) -> Self;
+    fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Result<Image<T>, IOError>;
     fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes_ref(&self) -> &[u8];
+    #[cfg(feature = "image_io")]
+    fn from_png(path: &str) -> Result<Image<T>, IOError>;
+    #[cfg(feature = "image_io")]
     fn to_png(&self, path: &str) -> Result<(), IOError>;
 }
 
@@ -93,25 +101,6 @@ trait Drawing<T> {}
 
 trait Utilities<T> {}
 
-
-fn bytes_to_rgb8(bytes: &[u8]) -> Vec<[u8; 3]> {
-    // converts a slice of bytes to a vector of pixels
-    assert_eq!(bytes.len() % 3, 0);
-    let slice: *const [[u8; 3]] = core::ptr::slice_from_raw_parts(
-        bytes.as_ptr() as *const [u8; 3],
-        bytes.len() / 3,
-    );
-    unsafe { (*slice).to_vec() }
-}
-
-fn rgb8_to_bytes(data: &[[u8; 3]]) -> &[u8] {
-    // returns a slice of bytes of a vector (slice) of pixels
-    let slice: *const [u8] = core::ptr::slice_from_raw_parts(
-        data.as_ptr() as *const u8,
-        data.len() * 3,
-    );
-    unsafe { &*slice }
-}
 
 impl Image<[u8; 3]> {
     pub fn new(width: usize, height: usize, background: [u8; 3]) -> Self {
@@ -128,110 +117,111 @@ impl Image<[u8; 3]> {
         }
     }
 
-    pub fn from_png(path: &str) -> Result<Self, &'static str> {
-        //! Reads the image from a PNG file.
-        //! Returns [Result] which holds new [Image] or [Err] with informative message.
-        //! ```path``` is the path to the PNG file.
-        //! The PNG file should be RGB or RGBA with bit depth of 8.
 
-        match File::open(path) {
-            Ok(file) =>
-                {
-                    let decoder = png::Decoder::new(file);
-                    match decoder.read_info() {
-                        Ok(information) =>
-                            {
-                                let mut reader = information;
-                                // Allocate the output buffer.
-                                let mut buf = vec![0; reader.output_buffer_size()];
-                                // Read the next frame. An APNG might contain multiple frames.
-                                match reader.next_frame(&mut buf) {
-                                    Ok(new_information) =>
-                                        {
-                                            let info = new_information;
-                                            // Grab the bytes of the image.
-                                            let bytes: &[u8];
-                                            if info.bit_depth == png::BitDepth::Eight {
-                                                // if image is not RGB panic, if it is RGBA convert to RGB
-                                                match info.color_type {
-                                                    png::ColorType::Rgb => {
-                                                        bytes = &buf[..info.buffer_size()];
-                                                        // return Image struct
-                                                        Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
-                                                    },
-                                                    png::ColorType::Rgba => {
-                                                        buf.truncate(info.buffer_size());
-                                                        let mut iterator = 1..(buf.len() + 1);
-                                                        buf.retain(|_| iterator.next().expect("This shouldn't fail!") % 4 != 0);
-                                                        bytes = &buf;
-                                                        // return Image struct
-                                                        Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
-                                                    },
-                                                    _ => Err("Image color not RGB or RGBA!")
-                                                }
-                                            } else {
-                                                Err("Image bit depth is not 8!")
-                                            }
-                                        },
-                                    Err(_) => Err("Can't read file!")
-                                }
-                            },
-                        Err(_) => Err("Can't read file!"),
-                    }
-                },
-            Err(_) => Err("Can't open file!"),
-        }
-    }
+    //pub fn from_png(path: &str) -> Result<Self, &'static str> {
+    //    //! Reads the image from a PNG file.
+    //    //! Returns [Result] which holds new [Image] or [Err] with informative message.
+    //    //! ```path``` is the path to the PNG file.
+    //    //! The PNG file should be RGB or RGBA with bit depth of 8.
+//
+    //    match File::open(path) {
+    //        Ok(file) =>
+    //            {
+    //                let decoder = png::Decoder::new(file);
+    //                match decoder.read_info() {
+    //                    Ok(information) =>
+    //                        {
+    //                            let mut reader = information;
+    //                            // Allocate the output buffer.
+    //                            let mut buf = vec![0; reader.output_buffer_size()];
+    //                            // Read the next frame. An APNG might contain multiple frames.
+    //                            match reader.next_frame(&mut buf) {
+    //                                Ok(new_information) =>
+    //                                    {
+    //                                        let info = new_information;
+    //                                        // Grab the bytes of the image.
+    //                                        let bytes: &[u8];
+    //                                        if info.bit_depth == png::BitDepth::Eight {
+    //                                            // if image is not RGB panic, if it is RGBA convert to RGB
+    //                                            match info.color_type {
+    //                                                png::ColorType::Rgb => {
+    //                                                    bytes = &buf[..info.buffer_size()];
+    //                                                    // return Image struct
+    //                                                    Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
+    //                                                },
+    //                                                png::ColorType::Rgba => {
+    //                                                    buf.truncate(info.buffer_size());
+    //                                                    let mut iterator = 1..(buf.len() + 1);
+    //                                                    buf.retain(|_| iterator.next().expect("This shouldn't fail!") % 4 != 0);
+    //                                                    bytes = &buf;
+    //                                                    // return Image struct
+    //                                                    Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
+    //                                                },
+    //                                                _ => Err("Image color not RGB or RGBA!")
+    //                                            }
+    //                                        } else {
+    //                                            Err("Image bit depth is not 8!")
+    //                                        }
+    //                                    },
+    //                                Err(_) => Err("Can't read file!")
+    //                            }
+    //                        },
+    //                    Err(_) => Err("Can't read file!"),
+    //                }
+    //            },
+    //        Err(_) => Err("Can't open file!"),
+    //    }
+    //}
 
-    pub fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Result<Self, &'static str> {
-        //! Returns [Result] with new [Image] or [Err] with informative message.
-        //! It is constructed from ```width```, ```height``` and ```bytes```
+    //pub fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Result<Self, &'static str> {
+    //    //! Returns [Result] with new [Image] or [Err] with informative message.
+    //    //! It is constructed from ```width```, ```height``` and ```bytes```
+//
+    //    if width * height * 3 != bytes.len() {
+    //        // if number of bytes doesn't match expected number of bytes, panic
+    //        Err("Number of bytes does not match an RGB image with given dimensions!")
+    //    } else {
+    //        // generate RGB image from bytes separately as it needs to be cloned as two separate instances are needed
+    //        let img = bytes_to_rgb8(bytes);
+    //        Ok(Self { width, height, data: img.clone(), image_type: ImageType::RGB8 , background_data: BackgroundData::Image(img) })
+    //    }
+    //}
 
-        if width * height * 3 != bytes.len() {
-            // if number of bytes doesn't match expected number of bytes, panic
-            Err("Number of bytes does not match an RGB image with given dimensions!")
-        } else {
-            // generate RGB image from bytes separately as it needs to be cloned as two separate instances are needed
-            let img = bytes_to_rgb8(bytes);
-            Ok(Self { width, height, data: img.clone(), image_type: ImageType::RGB8 , background_data: BackgroundData::Image(img) })
-        }
-    }
+    //pub fn to_png(&self, path: &str) -> Result<(), &'static str> {
+    //    //! Saves the image as PNG.
+    //    //! ```path``` is a path + filename where it will be saved.
+    //    //! Returns [Ok] if everything goes well, or [Err] with description of the error.
+    //    let path = Path::new(path);
+//
+    //    match File::create(path) {
+    //        Ok(new_file) =>
+    //            {
+    //                let file = new_file;
+    //                let w = BufWriter::new(file);
+//
+    //                let mut encoder = png::Encoder::new(w, self.width as u32, self.height as u32);
+    //                encoder.set_color(png::ColorType::Rgb);
+    //                encoder.set_depth(png::BitDepth::Eight);
+//
+    //                match encoder.write_header() {
+    //                    Ok(mut writer) =>
+    //                        {
+    //                            match writer.write_image_data(self.to_bytes()) {
+    //                                Ok(_) => Ok(()),
+    //                                Err(_) => Err("Can't write image to file!")
+    //                            }
+    //                        },
+    //                    Err(_) => Err("Can't write image to file!")
+    //                }
+    //            },
+    //        Err(_) => Err("Can't create file!")
+    //    }
+    //}
 
-    pub fn to_png(&self, path: &str) -> Result<(), &'static str> {
-        //! Saves the image as PNG.
-        //! ```path``` is a path + filename where it will be saved.
-        //! Returns [Ok] if everything goes well, or [Err] with description of the error.
-        let path = Path::new(path);
-
-        match File::create(path) {
-            Ok(new_file) =>
-                {
-                    let file = new_file;
-                    let w = BufWriter::new(file);
-
-                    let mut encoder = png::Encoder::new(w, self.width as u32, self.height as u32);
-                    encoder.set_color(png::ColorType::Rgb);
-                    encoder.set_depth(png::BitDepth::Eight);
-
-                    match encoder.write_header() {
-                        Ok(mut writer) =>
-                            {
-                                match writer.write_image_data(self.to_bytes()) {
-                                    Ok(_) => Ok(()),
-                                    Err(_) => Err("Can't write image to file!")
-                                }
-                            },
-                        Err(_) => Err("Can't write image to file!")
-                    }
-                },
-            Err(_) => Err("Can't create file!")
-        }
-    }
-
-    pub fn to_bytes(&self) -> &[u8] {
-        //! Returns a slice of bytes of the ```data```
-        rgb8_to_bytes(&self.data)
-    }
+    //pub fn to_bytes(&self) -> &[u8] {
+    //    //! Returns a slice of bytes of the ```data```
+    //    rgb8_to_bytes(&self.data)
+    //}
 
     pub fn get_pixel(&self, x: usize, y: usize) -> Result<[u8; 3], &'static str> {
         //! Returns an RGB value of the specified pixel if that pixel exists.
@@ -1472,7 +1462,7 @@ impl Image<[u8; 3]> {
 
 impl<T> Indexing<T> for Image<T>
 where
-    T: Copy,
+    T: Copy + PartialEq + Eq + 'static,
 {
     fn index(&self, index: (usize, usize)) -> Result<usize, IndexingError> {
         if index.0 >= self.width || index.1 >= self.height {
@@ -1649,4 +1639,177 @@ where
             self.data[temp_index..temp_index + index_x_upper - index_x_lower].fill(value);
         }
     }
+}
+
+impl<T> IO<T> for Image<T>
+where
+    T: Copy + PartialEq + Eq + 'static,
+{
+    fn new(width: usize, height: usize, background: T) -> Self {
+
+        let img_type: ImageType = if TypeId::of::<T>() == TypeId::of::<[u8; 3]>() {
+            ImageType::RGB8
+        } else if TypeId::of::<T>() == TypeId::of::<[u8; 4]>() {
+            ImageType::RGBA8
+        } else if TypeId::of::<T>() == TypeId::of::<[u16; 3]>() {
+            ImageType::RGB16
+        } else if TypeId::of::<T>() == TypeId::of::<[u16; 4]>() {
+            ImageType::RGBA16
+        } else {
+            panic!("Background type not supported!")
+        };
+
+        Self {
+            data: vec![background; width * height],
+            width,
+            height,
+            image_type: img_type,
+            background_data: BackgroundData::Color(background),
+        }
+    }
+    fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Result<Image<T>, IOError> {
+        Ok(if TypeId::of::<T>() == TypeId::of::<[u8; 3]>() {
+            if bytes.len() != width * height * 3 {
+                return Err(IOError::InvalidSize);
+            }
+
+            let slice: *const [T] = slice_from_raw_parts(
+                bytes.as_ptr() as *const T,
+                bytes.len() / 3,
+            );
+            let data = unsafe { (*slice).to_vec() };
+
+            let mut data_iterator = data.iter();
+            let first_element = data_iterator.next().unwrap();
+            let background_data = if data_iterator.all(|&x| x == *first_element) {
+                BackgroundData::Color(*first_element)
+            } else {
+                BackgroundData::Image(data.clone())
+            };
+
+            Self {
+                data,
+                width,
+                height,
+                image_type: ImageType::RGB8,
+                background_data,
+            }
+        } else if TypeId::of::<T>() == TypeId::of::<[u8; 4]>() {
+            if bytes.len() != width * height * 4 {
+                return Err(IOError::InvalidSize);
+            }
+
+            let slice: *const [T] = slice_from_raw_parts(
+                bytes.as_ptr() as *const T,
+                bytes.len() / 4,
+            );
+            let data = unsafe { (*slice).to_vec() };
+
+            let mut data_iterator = data.iter();
+            let first_element = data_iterator.next().unwrap();
+            let background_data = if data_iterator.all(|&x| x == *first_element) {
+                BackgroundData::Color(*first_element)
+            } else {
+                BackgroundData::Image(data.clone())
+            };
+
+            Self {
+                data,
+                width,
+                height,
+                image_type: ImageType::RGBA8,
+                background_data,
+            }
+        } else if TypeId::of::<T>() == TypeId::of::<[u16; 3]>() {
+            if bytes.len() != width * height * 2 * 3 {
+                return Err(IOError::InvalidSize);
+            }
+
+            let slice: *const [T] = slice_from_raw_parts(
+                bytes.as_ptr() as *const T,
+                bytes.len() / (2 * 3),
+            );
+            let data = unsafe { (*slice).to_vec() };
+
+            let mut data_iterator = data.iter();
+            let first_element = data_iterator.next().unwrap();
+            let background_data = if data_iterator.all(|&x| x == *first_element) {
+                BackgroundData::Color(*first_element)
+            } else {
+                BackgroundData::Image(data.clone())
+            };
+
+            Self {
+                data,
+                width,
+                height,
+                image_type: ImageType::RGB16,
+                background_data,
+            }
+        } else if TypeId::of::<T>() == TypeId::of::<[u16; 4]>() {
+            if bytes.len() != width * height * 2 * 4 {
+                return Err(IOError::InvalidSize);
+            }
+
+            let slice: *const [T] = slice_from_raw_parts(
+                bytes.as_ptr() as *const T,
+                bytes.len() / (2 * 4),
+            );
+            let data = unsafe { (*slice).to_vec() };
+
+            let mut data_iterator = data.iter();
+            let first_element = data_iterator.next().unwrap();
+            let background_data = if data_iterator.all(|&x| x == *first_element) {
+                BackgroundData::Color(*first_element)
+            } else {
+                BackgroundData::Image(data.clone())
+            };
+
+            Self {
+                data,
+                width,
+                height,
+                image_type: ImageType::RGBA16,
+                background_data,
+            }
+        } else {
+            panic!("Background type not supported!")
+        })
+    }
+    fn to_bytes(&self) -> Vec<u8> {
+        Self::to_bytes_ref(self).to_vec()
+    }
+    fn to_bytes_ref(&self) -> &[u8] {
+        if TypeId::of::<T>() == TypeId::of::<[u8; 3]>() {
+            let pointer: *const [u8] = slice_from_raw_parts(
+                self.data.as_ptr() as *const u8,
+                self.data.len() * 3,
+            );
+            unsafe { &*pointer }
+        } else if TypeId::of::<T>() == TypeId::of::<[u8; 4]>() {
+            let pointer: *const [u8] = slice_from_raw_parts(
+                self.data.as_ptr() as *const u8,
+                self.data.len() * 4,
+            );
+            unsafe { &*pointer }
+        } else if TypeId::of::<T>() == TypeId::of::<[u16; 3]>() {
+            let pointer: *const [u8] = slice_from_raw_parts(
+                self.data.as_ptr() as *const u8,
+                self.data.len() * 2 * 3,
+            );
+            unsafe { &*pointer }
+        } else if TypeId::of::<T>() == TypeId::of::<[u16; 4]>() {
+            let pointer: *const [u8] = slice_from_raw_parts(
+                self.data.as_ptr() as *const u8,
+                self.data.len() * 2 * 4,
+            );
+            unsafe { &*pointer }
+        } else {
+            panic!("Background type not supported!")
+        }
+    }
+    #[cfg(feature = "image_io")]
+    fn from_png(path: &str) -> Result<Image<T>, IOError> {Err(IOError::UnsupportedFormat)}
+    #[cfg(feature = "image_io")]
+    fn to_png(&self, path: &str) -> Result<(), IOError> {Ok(())}
 }

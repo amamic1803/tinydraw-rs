@@ -4,7 +4,7 @@
 //!
 //! Example usage:
 //! ```rust
-//! use tinydraw::Image;
+//! use tinydraw::{Image, IO};
 //!
 //! let background_color: [u8; 3] = [255, 155, 0];
 //! let mut image: Image<[u8; 3]> = Image::new(640, 360, background_color);
@@ -20,7 +20,7 @@
 //! image.draw_ellipse(319, 90, 80, 30, [255, 255, 255], 0, 1.0);
 //! image.draw_ellipse(319, 90, 60, 20, [0, 0, 0], 0, 1.0);
 //!
-//! let bytes: &[u8] = image.to_bytes(); // get image as bytes
+//! let bytes: &[u8] = image.to_bytes_ref(); // get image as bytes
 //! // image.to_png("image.png").unwrap(); // export image as PNG
 //! ```
 //!
@@ -34,6 +34,7 @@ pub use image::{
     Image,
     IndexingError,
     IOError,
+    IO,
 };
 
 #[cfg(test)]
@@ -62,7 +63,7 @@ mod tests {
         image.draw_ellipse(319, 90, 80, 30, [255, 255, 255], 0, 1.0);
         image.draw_ellipse(319, 90, 60, 20, [0, 0, 0], 0, 1.0);
 
-        let _bytes: &[u8] = image.to_bytes();
+        let _bytes: &[u8] = image.to_bytes_ref();
         // image.to_png("image.png").unwrap();
     }
 }
