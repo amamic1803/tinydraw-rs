@@ -1,10 +1,97 @@
-//! A module that contains the [ImageRGB8] struct and related functions.
+//! A module that contains the [Image] struct and related functions.
 
 use std::path::Path;
 use std::fs::File;
 use std::io::BufWriter;
 use std::cmp::{min, max};
 use std::f64::consts::FRAC_1_SQRT_2;
+use std::ops::{Bound, RangeBounds};
+
+
+#[derive(Debug)]
+/// A struct that holds an image
+pub struct Image<T> {
+    /// The image pixel data
+    pub data: Vec<T>,
+    /// The width of the image
+    pub width: usize,
+    /// The height of the image
+    pub height: usize,
+    /// The type of the image
+    pub image_type: ImageType,
+    /// The background of the image
+    background_data: BackgroundData
+}
+
+
+#[derive(Debug)]
+/// An enum that holds the image type information for [Image]
+pub enum ImageType {
+    RGB8,
+    RGBA8,
+    RGB16,
+    RGBA16,
+    RGB32,
+    RGBA32,
+    RGB64,
+    RGBA64,
+    RGB128,
+    RGBA128,
+}
+
+#[derive(Debug)]
+/// An enum that holds the error information for [Indexing] trait
+pub enum IndexingError {
+    /// The index is out of bounds
+    OutOfBounds,
+}
+
+#[derive(Debug)]
+/// An enum that holds the error information for [IO] trait
+pub enum IOError {}
+
+#[derive(Debug)]
+/// An enum that holds the background information for [Image]
+enum BackgroundData {
+    /// The background is a color
+    Color([u8; 3]),
+    /// The background is an image
+    Image(Vec<[u8; 3]>)
+}
+
+
+trait Indexing<T>
+where
+    T: Copy,
+{
+    fn index(&self, index: (usize, usize)) -> Result<usize, IndexingError>;
+    fn index_unchecked(&self, index: (usize, usize)) -> usize;
+    fn get(&self, index: (usize, usize)) -> Result<T, IndexingError>;
+    fn get_unchecked(&self, index: (usize, usize)) -> T;
+    fn get_ref(&self, index: (usize, usize)) -> Result<&T, IndexingError>;
+    fn get_ref_unchecked(&self, index: (usize, usize)) -> &T;
+    fn get_ref_mut(&mut self, index: (usize, usize)) -> Result<&mut T, IndexingError>;
+    fn get_ref_mut_unchecked(&mut self, index: (usize, usize)) -> &mut T;
+    fn set(&mut self, index: (usize, usize), value: T) -> Result<(), IndexingError>;
+    fn set_unchecked(&mut self, index: (usize, usize), value: T);
+    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T) -> Result<(), IndexingError>;
+    fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T);
+}
+
+trait IO<T>
+where
+    T: Copy
+{
+    fn new(width: usize, height: usize, background: T) -> Self;
+    fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Self;
+    fn from_png(path: &str) -> Self;
+    fn to_bytes(&self) -> Vec<u8>;
+    fn to_png(&self, path: &str) -> Result<(), IOError>;
+}
+
+trait Drawing<T> {}
+
+trait Utilities<T> {}
 
 
 fn bytes_to_rgb8(bytes: &[u8]) -> Vec<[u8; 3]> {
@@ -17,7 +104,7 @@ fn bytes_to_rgb8(bytes: &[u8]) -> Vec<[u8; 3]> {
     unsafe { (*slice).to_vec() }
 }
 
-fn rgb8_to_bytes(rgb8: &[[u8; 3]]) -> &[u8] {
+fn rgb8_to_bytes(data: &[[u8; 3]]) -> &[u8] {
     // returns a slice of bytes of a vector (slice) of pixels
     let slice: *const [u8] = core::ptr::slice_from_raw_parts(
         data.as_ptr() as *const u8,
@@ -26,35 +113,24 @@ fn rgb8_to_bytes(rgb8: &[[u8; 3]]) -> &[u8] {
     unsafe { &*slice }
 }
 
-enum BackgroundRGB8 {
-    // enum that holds image background information for ImageRGB8
-    Color([u8; 3]),
-    Image(Vec<[u8; 3]>)
-}
-
-/// A struct that holds an RGB image with bit depth of 8
-pub struct ImageRGB8 {
-    /// The width of the image
-    pub width: usize,
-    /// The height of the image
-    pub height: usize,
-    /// The image pixel data
-    pub image_data: Vec<[u8; 3]>,
-    background_data: BackgroundRGB8
-}
-
-impl ImageRGB8 {
+impl Image<[u8; 3]> {
     pub fn new(width: usize, height: usize, background: [u8; 3]) -> Self {
-        //! Returns a new [ImageRGB8].
+        //! Returns a new [Image].
         //! ```width```, ```height``` are image dimensions.
         //! ```background``` is image's color.
 
-        Self { width, height, image_data: vec![background; width * height], background_data: BackgroundRGB8::Color(background) }
+        Self {
+            data: vec![background; width * height],
+            width,
+            height,
+            image_type: ImageType::RGB8,
+            background_data: BackgroundData::Color(background)
+        }
     }
 
     pub fn from_png(path: &str) -> Result<Self, &'static str> {
         //! Reads the image from a PNG file.
-        //! Returns [Result] which holds new [ImageRGB8] or [Err] with informative message.
+        //! Returns [Result] which holds new [Image] or [Err] with informative message.
         //! ```path``` is the path to the PNG file.
         //! The PNG file should be RGB or RGBA with bit depth of 8.
 
@@ -80,7 +156,7 @@ impl ImageRGB8 {
                                                 match info.color_type {
                                                     png::ColorType::Rgb => {
                                                         bytes = &buf[..info.buffer_size()];
-                                                        // return ImageRGB8 struct
+                                                        // return Image struct
                                                         Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
                                                     },
                                                     png::ColorType::Rgba => {
@@ -88,7 +164,7 @@ impl ImageRGB8 {
                                                         let mut iterator = 1..(buf.len() + 1);
                                                         buf.retain(|_| iterator.next().expect("This shouldn't fail!") % 4 != 0);
                                                         bytes = &buf;
-                                                        // return ImageRGB8 struct
+                                                        // return Image struct
                                                         Ok(Self::from_bytes(info.width as usize, info.height as usize, bytes).expect("This shouldn't fail!"))
                                                     },
                                                     _ => Err("Image color not RGB or RGBA!")
@@ -108,7 +184,7 @@ impl ImageRGB8 {
     }
 
     pub fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Result<Self, &'static str> {
-        //! Returns [Result] with new [ImageRGB8] or [Err] with informative message.
+        //! Returns [Result] with new [Image] or [Err] with informative message.
         //! It is constructed from ```width```, ```height``` and ```bytes```
 
         if width * height * 3 != bytes.len() {
@@ -117,7 +193,7 @@ impl ImageRGB8 {
         } else {
             // generate RGB image from bytes separately as it needs to be cloned as two separate instances are needed
             let img = bytes_to_rgb8(bytes);
-            Ok(Self { width, height, image_data: img.clone(), background_data: BackgroundRGB8::Image(img) })
+            Ok(Self { width, height, data: img.clone(), image_type: ImageType::RGB8 , background_data: BackgroundData::Image(img) })
         }
     }
 
@@ -153,8 +229,8 @@ impl ImageRGB8 {
     }
 
     pub fn to_bytes(&self) -> &[u8] {
-        //! Returns a slice of bytes of the ```image_data```
-        rgb8_to_bytes(&self.image_data)
+        //! Returns a slice of bytes of the ```data```
+        rgb8_to_bytes(&self.data)
     }
 
     pub fn get_pixel(&self, x: usize, y: usize) -> Result<[u8; 3], &'static str> {
@@ -163,7 +239,7 @@ impl ImageRGB8 {
         if x >= self.width || y >= self.height {
             Err("Given coordinates exceed image limits!")
         } else {
-            Ok(self.image_data[self.width * (self.height - 1 - y) + x])
+            Ok(self.data[self.width * (self.height - 1 - y) + x])
         }
     }
 
@@ -172,24 +248,24 @@ impl ImageRGB8 {
         //! If the pixel doesn't exist, does nothing.
 
         if x < self.width || y < self.width {
-            self.image_data[self.width * (self.height - 1 - y) + x] = color;
+            self.data[self.width * (self.height - 1 - y) + x] = color;
         }
     }
 
     pub fn clear(&mut self) {
-        //! Clears ```image_data``` of any drawings (resets it to the state it was in when [ImageRGB8] was created, unless [ImageRGB8::set_background_color()] was used).
+        //! Clears ```data``` of any drawings (resets it to the state it was in when [Image] was created, unless [Image::set_background_color()] was used).
 
         match &self.background_data {
-            BackgroundRGB8::Color(color) => self.image_data.fill(*color),
-            BackgroundRGB8::Image(img) => self.image_data = img.clone(),
+            BackgroundData::Color(color) => self.data.fill(*color),
+            BackgroundData::Image(img) => self.data = img.clone(),
         }
     }
 
     pub fn set_background_color(&mut self, color: [u8; 3]) {
         //! Sets a new color that will be used as background.
-        //! This only changes internal background data, if you want to apply this to image, call [ImageRGB8::clear()] after this.
+        //! This only changes internal background data, if you want to apply this to image, call [Image::clear()] after this.
 
-        self.background_data = BackgroundRGB8::Color(color);
+        self.background_data = BackgroundData::Color(color);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -214,12 +290,12 @@ impl ImageRGB8 {
                 };
                 if opacity >= 1.0 {
                     for y in lower_y..(upper_y + 1) {
-                        self.image_data[self.width * (self.height - 1 - y) + x1] = color;
+                        self.data[self.width * (self.height - 1 - y) + x1] = color;
                     }
                 } else {
                     for y in lower_y..(upper_y + 1) {
                         for channel in 0..color.len() {
-                            self.image_data[self.width * (self.height - 1 - y) + x1][channel] = ((self.image_data[self.width * (self.height - 1 - y) + x1][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                            self.data[self.width * (self.height - 1 - y) + x1][channel] = ((self.data[self.width * (self.height - 1 - y) + x1][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                         }
                     }
                 }
@@ -237,11 +313,11 @@ impl ImageRGB8 {
                 };
                 let row: usize = self.width * (self.height - 1 - y1);
                 if opacity >= 1.0 {
-                    self.image_data[(row + lower_x)..(row + upper_x + 1)].fill(color);
+                    self.data[(row + lower_x)..(row + upper_x + 1)].fill(color);
                 } else {
                     for ind in (row + lower_x)..(row + upper_x + 1) {
                         for channel in 0..color.len() {
-                            self.image_data[ind][channel] = ((self.image_data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                            self.data[ind][channel] = ((self.data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                         }
                     }
                 }
@@ -334,11 +410,11 @@ impl ImageRGB8 {
                         if (y - y.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel
                             if opacity >= 1.0 {
-                                self.image_data[self.width * (self.height - 1 - (y.round() as usize)) + x] = color;
+                                self.data[self.width * (self.height - 1 - (y.round() as usize)) + x] = color;
                             } else {
                                 let ind: usize = self.width * (self.height - 1 - (y.round() as usize)) + x;
                                 for channel in 0..color.len() {
-                                    self.image_data[ind][channel] = ((self.image_data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[ind][channel] = ((self.data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         } else {
@@ -353,8 +429,8 @@ impl ImageRGB8 {
                             let pix2_ind: usize = pix1_ind + self.width;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind][channel] = ((self.data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
                             }
                         }
                     }
@@ -364,11 +440,11 @@ impl ImageRGB8 {
                         if (x - x.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel
                             if opacity >= 1.0 {
-                                self.image_data[self.width * (self.height - 1 - y) + (x.round() as usize)] = color;
+                                self.data[self.width * (self.height - 1 - y) + (x.round() as usize)] = color;
                             } else {
                                 let ind: usize = self.width * (self.height - 1 - y) + (x.round() as usize);
                                 for channel in 0..color.len() {
-                                    self.image_data[ind][channel] = ((self.image_data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[ind][channel] = ((self.data[ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         } else {
@@ -383,8 +459,8 @@ impl ImageRGB8 {
                             let pix2_ind: usize = pix1_ind + 1;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind][channel] = ((self.data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
                             }
                         }
                     }
@@ -422,7 +498,7 @@ impl ImageRGB8 {
                     // draws line by line
                     for y in smaller_y..(bigger_y + 1) {
                         let base_location = self.width * (self.height - 1 - y);
-                        self.image_data[(base_location + smaller_x)..(base_location + bigger_x + 1)].fill(color);
+                        self.data[(base_location + smaller_x)..(base_location + bigger_x + 1)].fill(color);
                     }
                 } else {
                     // Draw filled, transparent rectangle.
@@ -433,7 +509,7 @@ impl ImageRGB8 {
                         for x in (base_location + smaller_x)..(base_location + bigger_x + 1) { // range of indexes on that line (horizontal line)
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[x][channel] = ((self.image_data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
+                                self.data[x][channel] = ((self.data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
                             }
                         }
                     }
@@ -455,13 +531,13 @@ impl ImageRGB8 {
                         used_thickness -= 1;
 
                         // draw horizontal sides
-                        self.image_data[(self.width * (self.height - 1 - smaller_y) + smaller_x)..(self.width * (self.height - 1 - smaller_y) + bigger_x + 1)].fill(color);
-                        self.image_data[(self.width * (self.height - 1 - bigger_y) + smaller_x)..(self.width * (self.height - 1 - bigger_y) + bigger_x + 1)].fill(color);
+                        self.data[(self.width * (self.height - 1 - smaller_y) + smaller_x)..(self.width * (self.height - 1 - smaller_y) + bigger_x + 1)].fill(color);
+                        self.data[(self.width * (self.height - 1 - bigger_y) + smaller_x)..(self.width * (self.height - 1 - bigger_y) + bigger_x + 1)].fill(color);
                         // draw vertical sides
                         for y in (smaller_y + 1)..bigger_y {
                             let base_location = self.width * (self.height - 1 - y);
-                            self.image_data[base_location + smaller_x] = color;
-                            self.image_data[base_location + bigger_x] = color;
+                            self.data[base_location + smaller_x] = color;
+                            self.data[base_location + bigger_x] = color;
                         }
 
                         smaller_x += 1;
@@ -491,7 +567,7 @@ impl ImageRGB8 {
                             for x in (base_location + smaller_x)..(base_location + bigger_x + 1) {  // pixels in those sides
                                 for channel in 0..color.len() {
                                     // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                    self.image_data[x][channel] = ((self.image_data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[x][channel] = ((self.data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         }
@@ -503,7 +579,7 @@ impl ImageRGB8 {
                                 let ind_location = base_location + x;
                                 for channel in 0..color.len() {
                                     // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                    self.image_data[ind_location][channel] = ((self.image_data[ind_location][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[ind_location][channel] = ((self.data[ind_location][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         }
@@ -551,11 +627,11 @@ impl ImageRGB8 {
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             if x_coord == x {
-                                self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
-                                self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
+                                self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
+                                self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
                             } else if y_coord.round() as usize > y_upperlimit {
-                                self.image_data[(self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord))..(self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord + 1)].fill(color);
-                                self.image_data[(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord))..(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord))..(self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord))..(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord + 1)].fill(color);
                                 previous_y = y_coord.round() as usize;
                             }
                         } else {
@@ -565,17 +641,17 @@ impl ImageRGB8 {
                             let pix1_ind: usize = self.width * (self.height - 1 - (y_coord.ceil() as usize)) + x_coord;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                             }
                             if (y_coord.ceil() as usize) < previous_y {
-                                self.image_data[(pix1_ind - 2 * (x_coord - x) + 1)..pix1_ind].fill(color);
-                                self.image_data[(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x) + 1)..(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width)].fill(color);
+                                self.data[(pix1_ind - 2 * (x_coord - x) + 1)..pix1_ind].fill(color);
+                                self.data[(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x) + 1)..(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width)].fill(color);
                                 previous_y = y_coord.ceil() as usize
                             }
                         }
@@ -588,10 +664,10 @@ impl ImageRGB8 {
                         if (x_coord - x_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             if y_coord == y {
-                                self.image_data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1)].fill(color);
                             } else {
-                                self.image_data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + (x_coord.round() as usize) + 1)].fill(color);
-                                self.image_data[(self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - (2 * y - y_coord)) + (x_coord.round() as usize) + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + (x_coord.round() as usize) + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - (2 * y - y_coord)) + (x_coord.round() as usize) + 1)].fill(color);
                             }
                         } else {
                             // split point between two pixels, and mirror to other 3 symmetric pixels
@@ -600,19 +676,19 @@ impl ImageRGB8 {
                             let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                             }
-                            self.image_data[(pix_ind - 2 * (x_coord.ceil() as usize - x) + 1)..pix_ind].fill(color);
-                            self.image_data[(pix_ind + 2 * (y_coord - y) * self.width - 2 * (x_coord.ceil() as usize - x) + 1)..(pix_ind + 2 * (y_coord - y) * self.width)].fill(color);
+                            self.data[(pix_ind - 2 * (x_coord.ceil() as usize - x) + 1)..pix_ind].fill(color);
+                            self.data[(pix_ind + 2 * (y_coord - y) * self.width - 2 * (x_coord.ceil() as usize - x) + 1)..(pix_ind + 2 * (y_coord - y) * self.width)].fill(color);
                         }
                     }
 
@@ -632,18 +708,18 @@ impl ImageRGB8 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             if x_coord == x {
                                 for channel in 0..color.len() {
-                                    self.image_data[self.width * (self.height - 1 - y_coord.round() as usize) + x_coord][channel] = ((self.image_data[self.width * (self.height - 1 - y_coord.round() as usize) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
-                                    self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - y_coord.round() as usize) + x_coord][channel] = ((self.data[self.width * (self.height - 1 - y_coord.round() as usize) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             } else if y_coord.round() as usize > y_upperlimit {
                                 for pixel_ind in (self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord))..(self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 for pixel_ind in (self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord))..(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 previous_y = y_coord.round() as usize;
@@ -655,23 +731,23 @@ impl ImageRGB8 {
                             let pix1_ind: usize = self.width * (self.height - 1 - (y_coord.ceil() as usize)) + x_coord;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                             }
                             if (y_coord.ceil() as usize) < previous_y {
                                 for pixel_ind in (pix1_ind - 2 * (x_coord - x) + 1)..pix1_ind {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 for pixel_ind in (pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x) + 1)..(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 previous_y = y_coord.ceil() as usize
@@ -688,18 +764,18 @@ impl ImageRGB8 {
                             if y_coord == y {
                                 for pixel_ind in (self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                             } else {
                                 for pixel_ind in (self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 for pixel_ind in (self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                             }
@@ -710,25 +786,25 @@ impl ImageRGB8 {
                             let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                             }
                             for pixel_ind in (pix_ind - 2 * (x_coord.ceil() as usize - x) + 1)..pix_ind {
                                 for channel in 0..color.len() {
-                                    self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                             for pixel_ind in (pix_ind + 2 * (y_coord - y) * self.width - 2 * (x_coord.ceil() as usize - x) + 1)..(pix_ind + 2 * (y_coord - y) * self.width) {
                                 for channel in 0..color.len() {
-                                    self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         }
@@ -748,12 +824,12 @@ impl ImageRGB8 {
 
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
-                            self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
-                            self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
+                            self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
+                            self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
                             if x_coord != x {
                                 // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
-                                self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)] = color;
-                                self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)] = color;
+                                self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)] = color;
+                                self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)] = color;
                             }
                         } else {
                             // split point between two pixels, and mirror to other 3 symmetric pixels
@@ -763,17 +839,17 @@ impl ImageRGB8 {
                             let pix2_ind: usize = pix1_ind + self.width;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind][channel] = ((self.data[pix2_ind][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                             }
                         }
@@ -785,12 +861,12 @@ impl ImageRGB8 {
 
                         if (x_coord - x_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
-                            self.image_data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize] = color;
-                            self.image_data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)] = color;
+                            self.data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize] = color;
+                            self.data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)] = color;
                             if y_coord != y {
                                 // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
-                                self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize] = color;
-                                self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)] = color;
+                                self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize] = color;
+                                self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)] = color;
                             }
                         } else {
                             // split point between two pixels, and mirror to other 3 symmetric pixels
@@ -799,20 +875,20 @@ impl ImageRGB8 {
                             let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix_ind - 1][channel] = ((self.image_data[pix_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix_ind - 1][channel] = ((self.data[pix_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind + 1][channel] = ((self.data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind - 1][channel] = ((self.image_data[temp_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind - 1][channel] = ((self.data[temp_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind + 1][channel] = ((self.data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                             }
                         }
@@ -825,16 +901,16 @@ impl ImageRGB8 {
                     let pix_ind: usize = self.width * (self.height - 1 - y_upperlimit) + x_coord.ceil() as usize;
                     for channel in 0..color.len() {
                         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                        self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         temp_ind = pix_ind + 2 * (y_upperlimit - y) * self.width;
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                     }
 
                 } else {
@@ -851,14 +927,14 @@ impl ImageRGB8 {
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             for channel in 0..color.len() {
-                                self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord][channel] = ((self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
-                                self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord][channel] = ((self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                             }
                             if x_coord != x {
                                 // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
                                 for channel in 0..color.len() {
-                                    self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)][channel] = ((self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
-                                    self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)][channel] = ((self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         } else {
@@ -869,17 +945,17 @@ impl ImageRGB8 {
                             let pix2_ind: usize = pix1_ind + self.width;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind][channel] = ((self.data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                             }
                         }
@@ -892,14 +968,14 @@ impl ImageRGB8 {
                         if (x_coord - x_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             for channel in 0..color.len() {
-                                self.image_data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize][channel] = ((self.image_data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
-                                self.image_data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)][channel] = ((self.image_data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                self.data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize][channel] = ((self.data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                self.data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)][channel] = ((self.data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                             }
                             if y_coord != y {
                                 // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
                                 for channel in 0..color.len() {
-                                    self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
-                                    self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         } else {
@@ -909,20 +985,20 @@ impl ImageRGB8 {
                             let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix_ind - 1][channel] = ((self.image_data[pix_ind - 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix_ind - 1][channel] = ((self.data[pix_ind - 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind + 1][channel] = ((self.data[temp_ind + 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind - 1][channel] = ((self.image_data[temp_ind - 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind - 1][channel] = ((self.data[temp_ind - 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind + 1][channel] = ((self.data[temp_ind + 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                             }
                         }
@@ -934,16 +1010,16 @@ impl ImageRGB8 {
                     let pix_ind: usize = self.width * (self.height - 1 - y_upperlimit) + x_coord.ceil() as usize;
                     for channel in 0..color.len() {
                         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                        self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         temp_ind = pix_ind + 2 * (y_upperlimit - y) * self.width;
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                     }
                 }
             }
@@ -983,11 +1059,11 @@ impl ImageRGB8 {
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             if x_coord == x {
-                                self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
-                                self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
+                                self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
+                                self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
                             } else if y_coord.round() as usize > y_upperlimit {
-                                self.image_data[(self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord))..(self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord + 1)].fill(color);
-                                self.image_data[(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord))..(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord))..(self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord))..(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord + 1)].fill(color);
                                 previous_y = y_coord.round() as usize;
                             }
                         } else {
@@ -997,17 +1073,17 @@ impl ImageRGB8 {
                             let pix1_ind: usize = self.width * (self.height - 1 - (y_coord.ceil() as usize)) + x_coord;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                             }
                             if (y_coord.ceil() as usize) < previous_y {
-                                self.image_data[(pix1_ind - 2 * (x_coord - x) + 1)..pix1_ind].fill(color);
-                                self.image_data[(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x) + 1)..(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width)].fill(color);
+                                self.data[(pix1_ind - 2 * (x_coord - x) + 1)..pix1_ind].fill(color);
+                                self.data[(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x) + 1)..(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width)].fill(color);
                                 previous_y = y_coord.ceil() as usize
                             }
                         }
@@ -1020,10 +1096,10 @@ impl ImageRGB8 {
                         if (x_coord - x_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             if y_coord == y {
-                                self.image_data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1)].fill(color);
                             } else {
-                                self.image_data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + (x_coord.round() as usize) + 1)].fill(color);
-                                self.image_data[(self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - (2 * y - y_coord)) + (x_coord.round() as usize) + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + (x_coord.round() as usize) + 1)].fill(color);
+                                self.data[(self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - (2 * y - y_coord)) + (x_coord.round() as usize) + 1)].fill(color);
                             }
                         } else {
                             // split point between two pixels, and mirror to other 3 symmetric pixels
@@ -1032,19 +1108,19 @@ impl ImageRGB8 {
                             let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                             }
-                            self.image_data[(pix_ind - 2 * (x_coord.ceil() as usize - x) + 1)..pix_ind].fill(color);
-                            self.image_data[(pix_ind + 2 * (y_coord - y) * self.width - 2 * (x_coord.ceil() as usize - x) + 1)..(pix_ind + 2 * (y_coord - y) * self.width)].fill(color);
+                            self.data[(pix_ind - 2 * (x_coord.ceil() as usize - x) + 1)..pix_ind].fill(color);
+                            self.data[(pix_ind + 2 * (y_coord - y) * self.width - 2 * (x_coord.ceil() as usize - x) + 1)..(pix_ind + 2 * (y_coord - y) * self.width)].fill(color);
                         }
                     }
 
@@ -1064,18 +1140,18 @@ impl ImageRGB8 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             if x_coord == x {
                                 for channel in 0..color.len() {
-                                    self.image_data[self.width * (self.height - 1 - y_coord.round() as usize) + x_coord][channel] = ((self.image_data[self.width * (self.height - 1 - y_coord.round() as usize) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
-                                    self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - y_coord.round() as usize) + x_coord][channel] = ((self.data[self.width * (self.height - 1 - y_coord.round() as usize) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             } else if y_coord.round() as usize > y_upperlimit {
                                 for pixel_ind in (self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord))..(self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 for pixel_ind in (self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord))..(self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 previous_y = y_coord.round() as usize;
@@ -1087,23 +1163,23 @@ impl ImageRGB8 {
                             let pix1_ind: usize = self.width * (self.height - 1 - (y_coord.ceil() as usize)) + x_coord;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                             }
                             if (y_coord.ceil() as usize) < previous_y {
                                 for pixel_ind in (pix1_ind - 2 * (x_coord - x) + 1)..pix1_ind {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 for pixel_ind in (pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x) + 1)..(pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 previous_y = y_coord.ceil() as usize
@@ -1122,18 +1198,18 @@ impl ImageRGB8 {
                             } else if y_coord == y {
                                 for pixel_ind in (self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                             } else {
                                 for pixel_ind in (self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - y_coord) + x_coord.round() as usize + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                                 for pixel_ind in (self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize))..(self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize + 1) {
                                     for channel in 0..color.len() {
-                                        self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                             }
@@ -1144,25 +1220,25 @@ impl ImageRGB8 {
                             let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                                 temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                             }
                             for pixel_ind in (pix_ind - 2 * (x_coord.ceil() as usize - x) + 1)..pix_ind {
                                 for channel in 0..color.len() {
-                                    self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                             for pixel_ind in (pix_ind + 2 * (y_coord - y) * self.width - 2 * (x_coord.ceil() as usize - x) + 1)..(pix_ind + 2 * (y_coord - y) * self.width) {
                                 for channel in 0..color.len() {
-                                    self.image_data[pixel_ind][channel] = ((self.image_data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[pixel_ind][channel] = ((self.data[pixel_ind][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         }
@@ -1182,12 +1258,12 @@ impl ImageRGB8 {
 
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
-                            self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
-                            self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
+                            self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord] = color;
+                            self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord] = color;
                             if x_coord != x {
                                 // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
-                                self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)] = color;
-                                self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)] = color;
+                                self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)] = color;
+                                self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)] = color;
                             }
                         } else {
                             // split point between two pixels, and mirror to other 3 symmetric pixels
@@ -1197,17 +1273,17 @@ impl ImageRGB8 {
                             let pix2_ind: usize = pix1_ind + self.width;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind][channel] = ((self.data[pix2_ind][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                             }
                         }
@@ -1219,12 +1295,12 @@ impl ImageRGB8 {
 
                         if (x_coord - x_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
-                            self.image_data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize] = color;
-                            self.image_data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)] = color;
+                            self.data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize] = color;
+                            self.data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)] = color;
                             if y_coord != y {
                                 // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
-                                self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize] = color;
-                                self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)] = color;
+                                self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize] = color;
+                                self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)] = color;
                             }
                         } else {
                             // split point between two pixels, and mirror to other 3 symmetric pixels
@@ -1233,20 +1309,20 @@ impl ImageRGB8 {
                             let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix_ind - 1][channel] = ((self.image_data[pix_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix_ind - 1][channel] = ((self.data[pix_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind + 1][channel] = ((self.data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind - 1][channel] = ((self.image_data[temp_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind - 1][channel] = ((self.data[temp_ind - 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind + 1][channel] = ((self.data[temp_ind + 1][channel] as f64) * (pix1_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                             }
                         }
@@ -1259,16 +1335,16 @@ impl ImageRGB8 {
                     let pix_ind: usize = self.width * (self.height - 1 - y_upperlimit) + x_coord.ceil() as usize;
                     for channel in 0..color.len() {
                         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                        self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         temp_ind = pix_ind + 2 * (y_upperlimit - y) * self.width;
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (pix2_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                     }
 
                 } else {
@@ -1285,21 +1361,21 @@ impl ImageRGB8 {
                         if (y_coord - y_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             for channel in 0..color.len() {
-                                self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord][channel] = ((self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord][channel] = ((self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                             }
                             if y_coord.round() as usize != y {
                                 for channel in 0..color.len() {
-                                    self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + x_coord][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                             if x_coord != x {
                                 // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
                                 for channel in 0..color.len() {
-                                    self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)][channel] = ((self.image_data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)][channel] = ((self.data[self.width * (self.height - 1 - (y_coord.round() as usize)) + (2 * x - x_coord)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                                 if y_coord.round() as usize != y {
                                     for channel in 0..color.len() {
-                                        self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                        self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - (y_coord.round() as usize))) + (2 * x - x_coord)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                     }
                                 }
                             }
@@ -1311,17 +1387,17 @@ impl ImageRGB8 {
                             let pix2_ind: usize = pix1_ind + self.width;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix1_ind][channel] = ((self.image_data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind][channel] = ((self.image_data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind][channel] = ((self.data[pix1_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind][channel] = ((self.data[pix2_ind][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind - 2 * (x_coord - x)][channel] = ((self.data[pix2_ind - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] = ((self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
-                                self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.image_data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix1_ind + 2 * (y_coord.ceil() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] = ((self.data[pix2_ind + 2 * (y_coord.floor() as usize - y) * self.width - 2 * (x_coord - x)][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                             }
                         }
@@ -1334,14 +1410,14 @@ impl ImageRGB8 {
                         if (x_coord - x_coord.round()).abs() < 0.00001 {
                             // if point is very close to integer, just draw it on that pixel, and mirror to other 3 symmetric pixels
                             for channel in 0..color.len() {
-                                self.image_data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize][channel] = ((self.image_data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
-                                self.image_data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)][channel] = ((self.image_data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                self.data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize][channel] = ((self.data[self.width * (self.height - 1 - y_coord) + x_coord.round() as usize][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                self.data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)][channel] = ((self.data[self.width * (self.height - 1 - y_coord) + (2 * x - x_coord.round() as usize)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                             }
                             if y_coord != y {
                                 // new x coord (mirrored to left) ===> x_coord = x - (x_coord - x)
                                 for channel in 0..color.len() {
-                                    self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
-                                    self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)][channel] = ((self.image_data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + x_coord.round() as usize][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
+                                    self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)][channel] = ((self.data[self.width * (self.height - 1 - (2 * y - y_coord)) + (2 * x - x_coord.round() as usize)][channel] as f64) * (1.0 - opacity) + (color[channel] as f64) * opacity).round() as u8;
                                 }
                             }
                         } else {
@@ -1351,20 +1427,20 @@ impl ImageRGB8 {
                             let pix_ind: usize = self.width * (self.height - 1 - y_coord) + x_coord.ceil() as usize;
                             for channel in 0..color.len() {
                                 // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[pix_ind - 1][channel] = ((self.image_data[pix_ind - 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[pix_ind - 1][channel] = ((self.data[pix_ind - 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind + 1][channel] = ((self.data[temp_ind + 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 temp_ind = pix_ind + 2 * (y_coord - y) * self.width;
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind - 1][channel] = ((self.image_data[temp_ind - 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind - 1][channel] = ((self.data[temp_ind - 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                                 temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                                self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
-                                self.image_data[temp_ind + 1][channel] = ((self.image_data[temp_ind + 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
+                                self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                                self.data[temp_ind + 1][channel] = ((self.data[temp_ind + 1][channel] as f64) * (1.0 - pix2_percentage) + (color[channel] as f64) * pix2_percentage).round() as u8;
 
                             }
                         }
@@ -1376,19 +1452,201 @@ impl ImageRGB8 {
                     let pix_ind: usize = self.width * (self.height - 1 - y_upperlimit) + x_coord.ceil() as usize;
                     for channel in 0..color.len() {
                         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                        self.image_data[pix_ind][channel] = ((self.image_data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[pix_ind][channel] = ((self.data[pix_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         let mut temp_ind = pix_ind - 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         temp_ind = pix_ind + 2 * (y_upperlimit - y) * self.width;
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
 
                         temp_ind -= 2 * (x_coord.ceil() as usize - x);
-                        self.image_data[temp_ind][channel] = ((self.image_data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
+                        self.data[temp_ind][channel] = ((self.data[temp_ind][channel] as f64) * (1.0 - pix1_percentage) + (color[channel] as f64) * pix1_percentage).round() as u8;
                     }
                 }
             }
+        }
+    }
+}
+
+
+impl<T> Indexing<T> for Image<T>
+where
+    T: Copy,
+{
+    fn index(&self, index: (usize, usize)) -> Result<usize, IndexingError> {
+        if index.0 >= self.width || index.1 >= self.height {
+            Err(IndexingError::OutOfBounds)
+        } else {
+            Ok(self.index_unchecked(index))
+        }
+    }
+    fn index_unchecked(&self, index: (usize, usize)) -> usize {
+        (self.height - index.1 - 1) * self.width + index.0
+    }
+    fn get(&self, index: (usize, usize)) -> Result<T, IndexingError> {
+        Ok(self.data[self.index(index)?])
+    }
+    fn get_unchecked(&self, index: (usize, usize)) -> T {
+        self.data[self.index_unchecked(index)]
+    }
+    fn get_ref(&self, index: (usize, usize)) -> Result<&T, IndexingError> {
+        Ok(&self.data[self.index(index)?])
+    }
+    fn get_ref_unchecked(&self, index: (usize, usize)) -> &T {
+        &self.data[self.index_unchecked(index)]
+    }
+    fn get_ref_mut(&mut self, index: (usize, usize)) -> Result<&mut T, IndexingError> {
+        let index_temp: usize = self.index(index)?;
+        Ok(&mut self.data[index_temp])
+    }
+    fn get_ref_mut_unchecked(&mut self, index: (usize, usize)) -> &mut T {
+        let index_temp: usize = self.index_unchecked(index);
+        &mut self.data[index_temp]
+    }
+    fn set(&mut self, index: (usize, usize), value: T) -> Result<(), IndexingError> {
+        let index_temp: usize = self.index(index)?;
+        self.data[index_temp] = value;
+        Ok(())
+    }
+    fn set_unchecked(&mut self, index: (usize, usize), value: T) {
+        let index_temp: usize = self.index_unchecked(index);
+        self.data[index_temp] = value;
+    }
+    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T) -> Result<(), IndexingError> {
+
+        let index_x_lower: usize = match index.0.start_bound() {
+            Bound::Included(&x) => {
+                if x >= self.width {
+                    return Err(IndexingError::OutOfBounds);
+                }
+                x
+            }
+            Bound::Excluded(&x) => {
+                if x + 1 >= self.width {
+                    return Err(IndexingError::OutOfBounds);
+                }
+                x + 1
+            }
+            Bound::Unbounded => {
+                0
+            }
+        };
+
+        let index_x_upper: usize = match index.0.end_bound() {
+            Bound::Included(&x) => {
+                if x >= self.width {
+                    return Err(IndexingError::OutOfBounds);
+                }
+                x + 1
+            }
+            Bound::Excluded(&x) => {
+                if x > self.width {
+                    return Err(IndexingError::OutOfBounds);
+                }
+                x
+            }
+            Bound::Unbounded => {
+                self.width
+            }
+        };
+
+        let index_y_lower: usize = match index.1.start_bound() {
+            Bound::Included(&y) => {
+                if y >= self.height {
+                    return Err(IndexingError::OutOfBounds);
+                }
+                y
+            }
+            Bound::Excluded(&y) => {
+                if y + 1 >= self.height {
+                    return Err(IndexingError::OutOfBounds);
+                }
+                y + 1
+            }
+            Bound::Unbounded => {
+                0
+            }
+        };
+
+        let index_y_upper: usize = match index.1.end_bound() {
+            Bound::Included(&y) => {
+                if y >= self.height {
+                    return Err(IndexingError::OutOfBounds);
+                }
+                y + 1
+            }
+            Bound::Excluded(&y) => {
+                if y > self.height {
+                    return Err(IndexingError::OutOfBounds);
+                }
+                y
+            }
+            Bound::Unbounded => {
+                self.height
+            }
+        };
+
+        for y in index_y_lower..index_y_upper {
+            let temp_index = self.index_unchecked((index_x_lower, y));
+            self.data[temp_index..temp_index + index_x_upper - index_x_lower].fill(value);
+        }
+
+        Ok(())
+    }
+    fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T) {
+
+        let index_x_lower: usize = match index.0.start_bound() {
+            Bound::Included(&x) => {
+                x
+            }
+            Bound::Excluded(&x) => {
+                x + 1
+            }
+            Bound::Unbounded => {
+                0
+            }
+        };
+
+        let index_x_upper: usize = match index.0.end_bound() {
+            Bound::Included(&x) => {
+                x + 1
+            }
+            Bound::Excluded(&x) => {
+                x
+            }
+            Bound::Unbounded => {
+                self.width
+            }
+        };
+
+        let index_y_lower: usize = match index.1.start_bound() {
+            Bound::Included(&y) => {
+                y
+            }
+            Bound::Excluded(&y) => {
+                y + 1
+            }
+            Bound::Unbounded => {
+                0
+            }
+        };
+
+        let index_y_upper: usize = match index.1.end_bound() {
+            Bound::Included(&y) => {
+                y + 1
+            }
+            Bound::Excluded(&y) => {
+                y
+            }
+            Bound::Unbounded => {
+                self.height
+            }
+        };
+
+        for y in index_y_lower..index_y_upper {
+            let temp_index = self.index_unchecked((index_x_lower, y));
+            self.data[temp_index..temp_index + index_x_upper - index_x_lower].fill(value);
         }
     }
 }

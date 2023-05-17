@@ -4,10 +4,10 @@
 //!
 //! Example usage:
 //! ```rust
-//! use tinydraw::ImageRGB8;
+//! use tinydraw::Image;
 //!
 //! let background_color: [u8; 3] = [255, 155, 0];
-//! let mut image: ImageRGB8 = ImageRGB8::new(640, 360, background_color);
+//! let mut image: Image<[u8; 3]> = Image::new(640, 360, background_color);
 //!
 //! image.draw_line(0, 0, 639, 359, [255, 255, 255], 1, 1.0);
 //! image.draw_line(0, 359, 639, 0, [255, 255, 255], 1, 1.0);
@@ -30,7 +30,11 @@
 
 pub mod image;
 #[doc(inline)]
-pub use image::ImageRGB8;
+pub use image::{
+    Image,
+    IndexingError,
+    IOError,
+};
 
 #[cfg(test)]
 mod tests {
@@ -39,7 +43,7 @@ mod tests {
     #[test]
     fn example_1() {
         let background_color: [u8; 3] = [255, 155, 0];
-        let mut image: ImageRGB8 = ImageRGB8::new(640, 360, background_color);
+        let mut image: Image<[u8; 3]> = Image::new(640, 360, background_color);
 
         image.draw_line(0, 0, 639, 359, [255, 255, 255], 1, 1.0);
         image.draw_line(0, 359, 639, 0, [255, 255, 255], 1, 1.0);
