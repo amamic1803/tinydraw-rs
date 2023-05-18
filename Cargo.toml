@@ -17,3 +17,6 @@ png = { version="0.17.7", optional=true }
 
 [features]
 image_io = ["dep:png"]
+
+[package.metadata.docs.rs]
+all-features = true

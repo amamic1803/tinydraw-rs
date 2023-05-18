@@ -3,11 +3,15 @@
 use std::any::TypeId;
 use std::cmp::{min, max};
 use std::f64::consts::FRAC_1_SQRT_2;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::BufWriter;
 use std::ops::{Bound, RangeBounds};
 use std::path::Path;
 use std::ptr::slice_from_raw_parts;
+
+
+
 
 
 #[derive(Debug)]
@@ -25,8 +29,27 @@ pub struct Image<T> {
     background_data: BackgroundData<T>
 }
 
+impl<T> Display for Image<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let img_size = self.width * self.height * std::mem::size_of::<T>();
+        write!(f, "Image:\n   dimensions: {}x{}\n   type: {}   size: {} bytes", self.width, self.height, self.image_type, img_size)
+    }
+}
 
-#[derive(Debug)]
+
+
+
+
+#[derive(Debug, Eq, PartialEq)]
+/// An enum that holds the background information for [Image]
+enum BackgroundData<T> {
+    /// The background is a color
+    Color(T),
+    /// The background is an image
+    Image(Vec<T>)
+}
+
+#[derive(Debug, Eq, PartialEq)]
 /// An enum that holds the image type information
 pub enum ImageType {
     /// An image with 8-bit RGB pixels
@@ -39,46 +62,133 @@ pub enum ImageType {
     RGBA16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 /// An enum that holds the error information for [Indexing] trait
 pub enum IndexingError {
     /// The index is out of bounds
     OutOfBounds,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 /// An enum that holds the error information for [IO] trait
 pub enum IOError {
+    /// The size of the image is invalid
     InvalidSize,
+    /// The unsupported type
+    InvalidType,
+    /// The format of the image is unsupported
     UnsupportedFormat,
 }
 
-#[derive(Debug)]
-/// An enum that holds the background information for [Image]
-enum BackgroundData<T> {
-    /// The background is a color
-    Color(T),
-    /// The background is an image
-    Image(Vec<T>)
+impl Display for ImageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ImageType::RGB8 => write!(f, "RGB8"),
+            ImageType::RGBA8 => write!(f, "RGBA8"),
+            ImageType::RGB16 => write!(f, "RGB16"),
+            ImageType::RGBA16 => write!(f, "RGBA16"),
+        }
+    }
+}
+
+impl Display for IndexingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IndexingError::OutOfBounds => write!(f, "IndexingError: Index out of bounds!"),
+        }
+    }
+}
+
+impl Display for IOError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IOError::InvalidType => write!(f, "IOError: Invalid type!"),
+            IOError::InvalidSize => write!(f, "IOError: Invalid size!"),
+            IOError::UnsupportedFormat => write!(f, "IOError: Unsupported format!"),
+        }
+    }
 }
 
 
+
+
+
 /// A trait for indexing into image data
-trait Indexing<T>
+pub trait Indexing<T>
 where
-    T: Copy + PartialEq + Eq + 'static,
+    T: Copy,
 {
+    /// Returns the index of the pixel at the given coordinates.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// # Returns
+    /// * [Result] which holds the index of the pixel or [Err] with [IndexingError].
     fn index(&self, index: (usize, usize)) -> Result<usize, IndexingError>;
+    /// Returns the index of the pixel at the given coordinates without checking the bounds.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// # Returns
+    /// * The index of the pixel.
     fn index_unchecked(&self, index: (usize, usize)) -> usize;
+    /// Returns the value of the pixel at the given coordinates.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// # Returns
+    /// * [Result] which holds the value of the pixel or [Err] with [IndexingError].
     fn get(&self, index: (usize, usize)) -> Result<T, IndexingError>;
+    /// Returns the value of the pixel at the given coordinates without checking the bounds.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// # Returns
+    /// * The value of the pixel.
     fn get_unchecked(&self, index: (usize, usize)) -> T;
+    /// Returns the value of the pixel at the given coordinates as a reference.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// # Returns
+    /// * [Result] which holds the reference to the value of the pixel or [Err] with [IndexingError].
     fn get_ref(&self, index: (usize, usize)) -> Result<&T, IndexingError>;
+    /// Returns the value of the pixel at the given coordinates as a reference without checking the bounds.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// # Returns
+    /// * The reference to the value of the pixel.
     fn get_ref_unchecked(&self, index: (usize, usize)) -> &T;
+    /// Returns the value of the pixel at the given coordinates as a mutable reference.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// # Returns
+    /// * [Result] which holds the mutable reference to the value of the pixel or [Err] with [IndexingError].
     fn get_ref_mut(&mut self, index: (usize, usize)) -> Result<&mut T, IndexingError>;
+    /// Returns the value of the pixel at the given coordinates as a mutable reference without checking the bounds.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// # Returns
+    /// * The mutable reference to the value of the pixel.
     fn get_ref_mut_unchecked(&mut self, index: (usize, usize)) -> &mut T;
+    /// Sets the value of the pixel at the given coordinates.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// * ```value``` - The value to set.
+    /// # Returns
+    /// * [Result] which holds [Ok] or [Err] with [IndexingError].
     fn set(&mut self, index: (usize, usize), value: T) -> Result<(), IndexingError>;
+    /// Sets the value of the pixel at the given coordinates without checking the bounds.
+    /// # Arguments
+    /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
+    /// * ```value``` - The value to set.
     fn set_unchecked(&mut self, index: (usize, usize), value: T);
+    /// Fills the given range in image with the given value.
+    /// # Arguments
+    /// * ```index``` - The tuple with the ranges of the image to fill.
+    /// * ```value``` - The value to fill with.
+    /// # Returns
+    /// * [Result] which holds [Ok] or [Err] with [IndexingError].
     fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T) -> Result<(), IndexingError>;
+    /// Fills the given range in image with the given value without checking the bounds.
+    /// # Arguments
+    /// * ```index``` - The tuple with the ranges of the image to fill.
+    /// * ```value``` - The value to fill with.
     fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T);
 }
 
@@ -87,14 +197,60 @@ pub trait IO<T>
 where
     T: Copy + PartialEq + Eq + 'static,
 {
-    fn new(width: usize, height: usize, background: T) -> Self;
+    /// Creates a new image from bytes.
+    /// Type annotations are required. Supported types are [[u8; 3]](https://doc.rust-lang.org/std/primitive.array.html), [[u8; 4]](https://doc.rust-lang.org/std/primitive.array.html), [[u16; 3]](https://doc.rust-lang.org/std/primitive.array.html) or [[u16; 4]](https://doc.rust-lang.org/std/primitive.array.html).
+    /// # Arguments
+    /// * ```width``` - The width of the image.
+    /// * ```height``` - The height of the image.
+    /// * ```bytes``` - The bytes to create the image from.
+    /// # Returns
+    /// * [Result] which holds the new [Image] or [Err] with [IOError].
+    /// # Example
+    /// ```
+    /// use tinydraw::{Image, ImageType, IO};
+    /// let image: Image<[u8; 3]> = Image::from_bytes(100, 100, &[0; 30000]).unwrap();
+    /// assert_eq!(image.width, 100);
+    /// assert_eq!(image.height, 100);
+    /// assert_eq!(image.image_type, ImageType::RGB8);
+    /// ```
     fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Result<Image<T>, IOError>;
+    /// Returns the bytes of the image.
+    /// # Returns
+    /// * The vector of bytes of the image.
+    /// # Example
+    /// ```
+    /// use tinydraw::{Image, IO};
+    /// let image: Image<[u8; 3]> = Image::from_bytes(100, 100, &[0; 30000]).unwrap();
+    /// let bytes = image.to_bytes();
+    /// assert_eq!(bytes.len(), 30000);
+    /// ```
     fn to_bytes(&self) -> Vec<u8>;
+    /// Returns the bytes of the image as a reference.
+    /// # Returns
+    /// * The slice of bytes of the image.
+    /// # Example
+    /// ```
+    /// use tinydraw::{Image, IO};
+    /// let image: Image<[u8; 3]> = Image::from_bytes(100, 100, &[0; 30000]).unwrap();
+    /// let bytes = image.to_bytes_ref();
+    /// assert_eq!(bytes.len(), 30000);
+    /// ```
     fn to_bytes_ref(&self) -> &[u8];
+    /// Creates a new image from a file. Requires the `image_io` feature.
+    /// Type annotations are required. Supported types are [[u8; 3]](https://doc.rust-lang.org/std/primitive.array.html), [[u8; 4]](https://doc.rust-lang.org/std/primitive.array.html), [[u16; 3]](https://doc.rust-lang.org/std/primitive.array.html) or [[u16; 4]](https://doc.rust-lang.org/std/primitive.array.html).
+    /// # Arguments
+    /// * ```path``` - The path to the file ([Path]).
+    /// # Returns
+    /// * [Result] which holds the new [Image] or [Err] with [IOError].
     #[cfg(feature = "image_io")]
-    fn from_png(path: &str) -> Result<Image<T>, IOError>;
+    fn from_file(path: &Path) -> Result<Image<T>, IOError>;
+    /// Saves the image to a file. Requires the `image_io` feature.
+    /// # Arguments
+    /// * ```path``` - The path to the file ([Path]).
+    /// # Returns
+    /// * [Result] which holds [Ok] if the image was saved successfully or [Err] with [IOError].
     #[cfg(feature = "image_io")]
-    fn to_png(&self, path: &str) -> Result<(), IOError>;
+    fn to_file(&self, path: &Path) -> Result<(), IOError>;
 }
 
 trait Drawing<T> {}
@@ -102,20 +258,9 @@ trait Drawing<T> {}
 trait Utilities<T> {}
 
 
-impl Image<[u8; 3]> {
-    pub fn new(width: usize, height: usize, background: [u8; 3]) -> Self {
-        //! Returns a new [Image].
-        //! ```width```, ```height``` are image dimensions.
-        //! ```background``` is image's color.
 
-        Self {
-            data: vec![background; width * height],
-            width,
-            height,
-            image_type: ImageType::RGB8,
-            background_data: BackgroundData::Color(background)
-        }
-    }
+
+impl Image<[u8; 3]> {
 
 
     //pub fn from_png(path: &str) -> Result<Self, &'static str> {
@@ -1462,7 +1607,7 @@ impl Image<[u8; 3]> {
 
 impl<T> Indexing<T> for Image<T>
 where
-    T: Copy + PartialEq + Eq + 'static,
+    T: Copy,
 {
     fn index(&self, index: (usize, usize)) -> Result<usize, IndexingError> {
         if index.0 >= self.width || index.1 >= self.height {
@@ -1504,7 +1649,6 @@ where
         self.data[index_temp] = value;
     }
     fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T) -> Result<(), IndexingError> {
-
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
                 if x >= self.width {
@@ -1585,7 +1729,6 @@ where
         Ok(())
     }
     fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), value: T) {
-
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
                 x
@@ -1645,28 +1788,6 @@ impl<T> IO<T> for Image<T>
 where
     T: Copy + PartialEq + Eq + 'static,
 {
-    fn new(width: usize, height: usize, background: T) -> Self {
-
-        let img_type: ImageType = if TypeId::of::<T>() == TypeId::of::<[u8; 3]>() {
-            ImageType::RGB8
-        } else if TypeId::of::<T>() == TypeId::of::<[u8; 4]>() {
-            ImageType::RGBA8
-        } else if TypeId::of::<T>() == TypeId::of::<[u16; 3]>() {
-            ImageType::RGB16
-        } else if TypeId::of::<T>() == TypeId::of::<[u16; 4]>() {
-            ImageType::RGBA16
-        } else {
-            panic!("Background type not supported!")
-        };
-
-        Self {
-            data: vec![background; width * height],
-            width,
-            height,
-            image_type: img_type,
-            background_data: BackgroundData::Color(background),
-        }
-    }
     fn from_bytes(width: usize, height: usize, bytes: &[u8]) -> Result<Image<T>, IOError> {
         Ok(if TypeId::of::<T>() == TypeId::of::<[u8; 3]>() {
             if bytes.len() != width * height * 3 {
@@ -1773,43 +1894,92 @@ where
                 background_data,
             }
         } else {
-            panic!("Background type not supported!")
+            return Err(IOError::InvalidType);
         })
     }
     fn to_bytes(&self) -> Vec<u8> {
         Self::to_bytes_ref(self).to_vec()
     }
     fn to_bytes_ref(&self) -> &[u8] {
-        if TypeId::of::<T>() == TypeId::of::<[u8; 3]>() {
-            let pointer: *const [u8] = slice_from_raw_parts(
-                self.data.as_ptr() as *const u8,
-                self.data.len() * 3,
-            );
-            unsafe { &*pointer }
-        } else if TypeId::of::<T>() == TypeId::of::<[u8; 4]>() {
-            let pointer: *const [u8] = slice_from_raw_parts(
-                self.data.as_ptr() as *const u8,
-                self.data.len() * 4,
-            );
-            unsafe { &*pointer }
-        } else if TypeId::of::<T>() == TypeId::of::<[u16; 3]>() {
-            let pointer: *const [u8] = slice_from_raw_parts(
-                self.data.as_ptr() as *const u8,
-                self.data.len() * 2 * 3,
-            );
-            unsafe { &*pointer }
-        } else if TypeId::of::<T>() == TypeId::of::<[u16; 4]>() {
-            let pointer: *const [u8] = slice_from_raw_parts(
-                self.data.as_ptr() as *const u8,
-                self.data.len() * 2 * 4,
-            );
-            unsafe { &*pointer }
-        } else {
-            panic!("Background type not supported!")
+        match self.image_type {
+            ImageType::RGB8 => {
+                let pointer: *const [u8] = slice_from_raw_parts(
+                    self.data.as_ptr() as *const u8,
+                    self.data.len() * 3,
+                );
+                unsafe { &*pointer }
+            }
+            ImageType::RGBA8 => {
+                let pointer: *const [u8] = slice_from_raw_parts(
+                    self.data.as_ptr() as *const u8,
+                    self.data.len() * 4,
+                );
+                unsafe { &*pointer }
+            }
+            ImageType::RGB16 => {
+                let pointer: *const [u8] = slice_from_raw_parts(
+                    self.data.as_ptr() as *const u8,
+                    self.data.len() * 2 * 3,
+                );
+                unsafe { &*pointer }
+            }
+            ImageType::RGBA16 => {
+                let pointer: *const [u8] = slice_from_raw_parts(
+                    self.data.as_ptr() as *const u8,
+                    self.data.len() * 2 * 4,
+                );
+                unsafe { &*pointer }
+            }
         }
     }
     #[cfg(feature = "image_io")]
-    fn from_png(path: &str) -> Result<Image<T>, IOError> {Err(IOError::UnsupportedFormat)}
+    fn from_file(path: &Path) -> Result<Image<T>, IOError> {Err(IOError::UnsupportedFormat)}
     #[cfg(feature = "image_io")]
-    fn to_png(&self, path: &str) -> Result<(), IOError> {Ok(())}
+    fn to_file(&self, path: &Path) -> Result<(), IOError> {Ok(())}
+}
+
+impl<T> Image<T>
+where
+    T: Copy + PartialEq + Eq + 'static,
+{
+    pub fn new(width: usize, height: usize, background: T) -> Self {
+        //! Creates a new image with the given width and height and fills it with the given background.
+        //! # Arguments
+        //! * `width` - The width of the image.
+        //! * `height` - The height of the image.
+        //! * `background` - The background color of the image. Should be [[u8; 3]](https://doc.rust-lang.org/std/primitive.array.html), [[u8; 4]](https://doc.rust-lang.org/std/primitive.array.html), [[u16; 3]](https://doc.rust-lang.org/std/primitive.array.html) or [[u16; 4]](https://doc.rust-lang.org/std/primitive.array.html).
+        //! # Returns
+        //! * [Image] - The created image.
+        //! # Panics
+        //! * If the background type is not supported.
+        //! # Example
+        //! ```
+        //! use tinydraw::{Image, ImageType};
+        //! let background: [u8; 3] = [255, 0, 0];
+        //! let image = Image::new(100, 100, background);
+        //! assert_eq!(image.width, 100);
+        //! assert_eq!(image.height, 100);
+        //! assert_eq!(image.image_type, ImageType::RGB8);
+        //! ```
+
+        let img_type: ImageType = if TypeId::of::<T>() == TypeId::of::<[u8; 3]>() {
+            ImageType::RGB8
+        } else if TypeId::of::<T>() == TypeId::of::<[u8; 4]>() {
+            ImageType::RGBA8
+        } else if TypeId::of::<T>() == TypeId::of::<[u16; 3]>() {
+            ImageType::RGB16
+        } else if TypeId::of::<T>() == TypeId::of::<[u16; 4]>() {
+            ImageType::RGBA16
+        } else {
+            panic!("Background type not supported!")
+        };
+
+        Self {
+            data: vec![background; width * height],
+            width,
+            height,
+            image_type: img_type,
+            background_data: BackgroundData::Color(background),
+        }
+    }
 }

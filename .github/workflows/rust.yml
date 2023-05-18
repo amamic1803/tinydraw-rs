@@ -22,7 +22,7 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Generate docs
-      run: cargo doc --verbose
+      run: cargo doc --verbose --all-features
   
   build-windows:
     name: build on windows
@@ -35,7 +35,7 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Generate docs
-      run: cargo doc --verbose
+      run: cargo doc --verbose --all-features
   
   build-macos:
     name: build on macos
@@ -48,4 +48,4 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Generate docs
-      run: cargo doc --verbose
+      run: cargo doc --verbose --all-features

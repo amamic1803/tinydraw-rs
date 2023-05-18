@@ -27,11 +27,13 @@
 //! **Shapes:** line, rectangle, ellipse, circle
 //!
 //! **Colorspaces:** RGB8
+//! Coordinates origin is at the bottom left corner of the image.
 
 pub mod image;
 #[doc(inline)]
 pub use image::{
     Image,
+    ImageType,
     IndexingError,
     IOError,
     IO,
@@ -65,5 +67,13 @@ mod tests {
 
         let _bytes: &[u8] = image.to_bytes_ref();
         // image.to_png("image.png").unwrap();
+        println!("{}", image.image_type);
+    }
+
+    #[test]
+    fn test_ex_2() {
+        let n1: [u8; 3] = [1, 2, 3];
+        let n2: [u16; 4] = [1, 2, 3, 4];
+        println!("{} {}", std::mem::size_of_val(&n1), std::mem::size_of_val(&n2));
     }
 }
