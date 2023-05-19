@@ -4,11 +4,17 @@ use std::any::TypeId;
 use std::cmp::{min, max};
 use std::f64::consts::FRAC_1_SQRT_2;
 use std::fmt::Display;
-use std::fs::File;
-use std::io::BufWriter;
 use std::ops::{Bound, RangeBounds};
-use std::path::Path;
 use std::ptr::slice_from_raw_parts;
+#[cfg(feature = "file_io")]
+use std::io::ErrorKind;
+
+#[cfg(feature = "file_io")]
+use image_io::{ColorType, DynamicImage};
+#[cfg(feature = "file_io")]
+use image_io::error::ImageError;
+#[cfg(feature = "file_io")]
+use image_io::io::Reader;
 
 
 
@@ -72,12 +78,26 @@ pub enum IndexingError {
 #[derive(Debug, Eq, PartialEq)]
 /// An enum that holds the error information for [IO] trait
 pub enum IOError {
+    /// Error while decoding the image
+    Decoding,
+    /// Error while encoding the image
+    Encoding,
+    /// The file already exists
+    FileExists,
+    /// The file was not found
+    FileNotFound,
+    /// The file is not an image
+    InvalidData,
     /// The size of the image is invalid
     InvalidSize,
     /// The unsupported type
     InvalidType,
-    /// The format of the image is unsupported
-    UnsupportedFormat,
+    /// The file could not be opened because of permissions
+    NoPermission,
+    /// The unknown error
+    Unknown,
+    /// The file can't be written
+    WriteError,
 }
 
 impl Display for ImageType {
@@ -102,9 +122,59 @@ impl Display for IndexingError {
 impl Display for IOError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IOError::InvalidType => write!(f, "IOError: Invalid type!"),
-            IOError::InvalidSize => write!(f, "IOError: Invalid size!"),
-            IOError::UnsupportedFormat => write!(f, "IOError: Unsupported format!"),
+            IOError::Decoding => write!(f, "IOError: Error while decoding the image!"),
+            IOError::Encoding => write!(f, "IOError: Error while encoding the image!"),
+            IOError::FileExists => write!(f, "IOError: File already exists!"),
+            IOError::FileNotFound => write!(f, "IOError: File not found!"),
+            IOError::InvalidData => write!(f, "IOError: Invalid data!"),
+            IOError::InvalidSize => write!(f, "IOError: The size of the image is invalid!"),
+            IOError::InvalidType => write!(f, "IOError: The unsupported type!"),
+            IOError::NoPermission => write!(f, "IOError: Can't be completed because of denied permission."),
+            IOError::Unknown => write!(f, "IOError: Unknown error!"),
+            IOError::WriteError => write!(f, "IOError: Can't write to file!"),
+        }
+    }
+}
+
+#[cfg(feature = "file_io")]
+impl From<ErrorKind> for IOError {
+    fn from(error: ErrorKind) -> Self {
+        match error {
+            ErrorKind::NotFound => IOError::FileNotFound,
+            ErrorKind::PermissionDenied => IOError::NoPermission,
+            ErrorKind::ConnectionRefused => IOError::Unknown,
+            ErrorKind::ConnectionReset => IOError::Unknown,
+            ErrorKind::ConnectionAborted => IOError::Unknown,
+            ErrorKind::NotConnected => IOError::Unknown,
+            ErrorKind::AddrInUse => IOError::Unknown,
+            ErrorKind::AddrNotAvailable => IOError::Unknown,
+            ErrorKind::BrokenPipe => IOError::Unknown,
+            ErrorKind::AlreadyExists => IOError::FileExists,
+            ErrorKind::WouldBlock => IOError::Unknown,
+            ErrorKind::InvalidInput => IOError::Unknown,
+            ErrorKind::InvalidData => IOError::InvalidData,
+            ErrorKind::TimedOut => IOError::Unknown,
+            ErrorKind::WriteZero => IOError::WriteError,
+            ErrorKind::Interrupted => IOError::Unknown,
+            ErrorKind::Unsupported => IOError::Unknown,
+            ErrorKind::UnexpectedEof => IOError::Unknown,
+            ErrorKind::OutOfMemory => IOError::Unknown,
+            ErrorKind::Other => IOError::Unknown,
+            _ => IOError::Unknown,
+        }
+    }
+}
+
+#[cfg(feature = "file_io")]
+impl From<ImageError> for IOError {
+    fn from(error: ImageError) -> Self {
+        match error {
+            ImageError::Decoding(_) => IOError::Decoding,
+            ImageError::Encoding(_) => IOError::Encoding,
+            ImageError::Parameter(_) => IOError::Unknown,
+            ImageError::Limits(_) => IOError::Unknown,
+            ImageError::Unsupported(_) => IOError::Unknown,
+            ImageError::IoError(err) => IOError::from(err.kind()),
         }
     }
 }
@@ -239,23 +309,24 @@ where
     /// Creates a new image from a file. Requires the `image_io` feature.
     /// Type annotations are required. Supported types are [[u8; 3]](https://doc.rust-lang.org/std/primitive.array.html), [[u8; 4]](https://doc.rust-lang.org/std/primitive.array.html), [[u16; 3]](https://doc.rust-lang.org/std/primitive.array.html) or [[u16; 4]](https://doc.rust-lang.org/std/primitive.array.html).
     /// # Arguments
-    /// * ```path``` - The path to the file ([Path]).
+    /// * ```path``` - The path to the file.
     /// # Returns
     /// * [Result] which holds the new [Image] or [Err] with [IOError].
-    #[cfg(feature = "image_io")]
-    fn from_file(path: &Path) -> Result<Image<T>, IOError>;
+    #[cfg(feature = "file_io")]
+    fn from_file(path: &str) -> Result<Image<T>, IOError>;
     /// Saves the image to a file. Requires the `image_io` feature.
     /// # Arguments
-    /// * ```path``` - The path to the file ([Path]).
+    /// * ```path``` - The path to the file.
     /// # Returns
     /// * [Result] which holds [Ok] if the image was saved successfully or [Err] with [IOError].
-    #[cfg(feature = "image_io")]
-    fn to_file(&self, path: &Path) -> Result<(), IOError>;
+    #[cfg(feature = "file_io")]
+    fn to_file(&self, path: &str) -> Result<(), IOError>;
 }
 
 trait Drawing<T> {}
 
 trait Utilities<T> {}
+
 
 
 
@@ -1932,10 +2003,31 @@ where
             }
         }
     }
-    #[cfg(feature = "image_io")]
-    fn from_file(path: &Path) -> Result<Image<T>, IOError> {Err(IOError::UnsupportedFormat)}
-    #[cfg(feature = "image_io")]
-    fn to_file(&self, path: &Path) -> Result<(), IOError> {Ok(())}
+    #[cfg(feature = "file_io")]
+    fn from_file(path: &str) -> Result<Image<T>, IOError> {
+
+        let image: DynamicImage = match (
+            match Reader::open(path) {
+                Ok(image) => image,
+                Err(err_type) => return Err(IOError::from(err_type.kind())),
+            }
+        ).decode() {
+            Ok(image) => image,
+            Err(err_type) => return Err(IOError::from(err_type)),
+        };
+
+        match image.color() {
+            ColorType::Rgb8 => {},
+            ColorType::Rgba8 => {},
+            ColorType::Rgb16 => {},
+            ColorType::Rgba16 => {},
+            _ => return Err(IOError::InvalidType),
+        }
+
+        Self::from_bytes(image.width() as usize, image.height() as usize, image.as_bytes())
+    }
+    #[cfg(feature = "file_io")]
+    fn to_file(&self, path: &str) -> Result<(), IOError> {Ok(())}
 }
 
 impl<T> Image<T>
@@ -1982,4 +2074,17 @@ where
             background_data: BackgroundData::Color(background),
         }
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic]
+    fn testio() {
+        let img = Image::<[u8; 4]>::from_file("test.png").unwrap();
+    }
+
 }
