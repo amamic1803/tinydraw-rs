@@ -467,7 +467,14 @@ pub trait IO {
 }
 
 /// A trait with useful functions for images.
-pub trait Utilities {}
+pub trait Utilities {
+
+    /// Deletes all drawings, restores image to match the saved background.
+    fn clear(&mut self);
+
+    /// Saves the current state of the image as background.
+    fn save_background(&mut self);
+}
 
 
 
@@ -2591,7 +2598,7 @@ impl Indexing for Image {
 impl IO for Image {
 
     fn from_bytes(width: usize, height: usize, image_type: ImageType, bytes: &[u8]) -> Result<Image, IOError> {
-        if bytes.len() != width * height * image_type.bytes_per_pixel() || bytes.len() == 0 {
+        if bytes.len() != width * height * image_type.bytes_per_pixel() || bytes.is_empty() {
             return Err(IOError::InvalidSize);
         }
         match image_type {
@@ -2751,6 +2758,111 @@ impl IO for Image {
     }
 }
 
+impl Utilities for Image {
+
+    fn clear(&mut self) {
+        match &self.background_data {
+            BackgroundData::Color(background_color) => {
+                let color_slice: &[u8] = match *background_color {
+                    Colors::GRAY8(color) => unsafe {slice_from_raw_parts(&[color] as *const u8, 1).as_ref().expect("Shouldn't fail!")},
+                    Colors::GRAYA8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 2).as_ref().expect("Shouldn't fail!")},
+                    Colors::GRAY16(color) => unsafe {slice_from_raw_parts(&[color] as *const u16 as *const u8, 2).as_ref().expect("Shouldn't fail!")},
+                    Colors::GRAYA16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 4).as_ref().expect("Shouldn't fail!")},
+                    Colors::RGB8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 3).as_ref().expect("Shouldn't fail!")},
+                    Colors::RGBA8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 4).as_ref().expect("Shouldn't fail!")},
+                    Colors::RGB16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 6).as_ref().expect("Shouldn't fail!")},
+                    Colors::RGBA16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 8).as_ref().expect("Shouldn't fail!")},
+                };
+                let background_len = background_color.bytes_per_pixel();
+                for x in 0..self.data.len() {
+                    self.data[x] = color_slice[x % background_len];
+                }
+            },
+            BackgroundData::Image(background_bytes) => {
+                self.data = background_bytes.clone();
+            },
+        }
+    }
+
+    fn save_background(&mut self) {
+        let mut same_data: bool = true;
+
+        match self.image_type {
+            ImageType::GRAY8 => {
+                let mut data_iterator = self.data.iter();
+                let first_element = data_iterator.next().unwrap();
+                same_data = data_iterator.all(|&x| x == *first_element);
+            },
+            ImageType::GRAYA8 | ImageType::GRAY16 => {
+                for i in 0..2 {
+                    for j in (i..(self.data.len() - 2)).step_by(2) {
+                        if self.data[j] != self.data[j + 2] {
+                            same_data = false;
+                            break;
+                        }
+                    }
+                }
+            },
+            ImageType::GRAYA16 | ImageType::RGBA8 => {
+                for i in 0..4 {
+                    for j in (i..(self.data.len() - 4)).step_by(4) {
+                        if self.data[j] != self.data[j + 4] {
+                            same_data = false;
+                            break;
+                        }
+                    }
+                }
+            },
+            ImageType::RGB8 => {
+                for i in 0..3 {
+                    for j in (i..(self.data.len() - 3)).step_by(3) {
+                        if self.data[j] != self.data[j + 3] {
+                            same_data = false;
+                            break;
+                        }
+                    }
+                }
+            },
+            ImageType::RGB16 => {
+                for i in 0..6 {
+                    for j in (i..(self.data.len() - 6)).step_by(6) {
+                        if self.data[j] != self.data[j + 6] {
+                            same_data = false;
+                            break;
+                        }
+                    }
+                }
+            },
+            ImageType::RGBA16 => {
+                for i in 0..8 {
+                    for j in (i..(self.data.len() - 8)).step_by(8) {
+                        if self.data[j] != self.data[j + 8] {
+                            same_data = false;
+                            break;
+                        }
+                    }
+                }
+            },
+        };
+
+        self.background_data =
+            if same_data {
+                BackgroundData::Color(match self.image_type {
+                    ImageType::GRAY8 => Colors::GRAY8(self.data[0]),
+                    ImageType::GRAYA8 => Colors::GRAYA8([self.data[0], self.data[1]]),
+                    ImageType::GRAY16 => Colors::GRAY16((self.data[0] as u16) << 8 | self.data[1] as u16),
+                    ImageType::GRAYA16 => Colors::GRAYA16([(self.data[0] as u16) << 8 | self.data[1] as u16, (self.data[2] as u16) << 8 | self.data[3] as u16]),
+                    ImageType::RGB8 => Colors::RGB8([self.data[0], self.data[1], self.data[2]]),
+                    ImageType::RGBA8 => Colors::RGBA8([self.data[0], self.data[1], self.data[2], self.data[3]]),
+                    ImageType::RGB16 => Colors::RGB16([(self.data[0] as u16) << 8 | self.data[1] as u16, (self.data[2] as u16) << 8 | self.data[3] as u16, (self.data[4] as u16) << 8 | self.data[5] as u16]),
+                    ImageType::RGBA16 => Colors::RGBA16([(self.data[0] as u16) << 8 | self.data[1] as u16, (self.data[2] as u16) << 8 | self.data[3] as u16, (self.data[4] as u16) << 8 | self.data[5] as u16, (self.data[6] as u16) << 8 | self.data[7] as u16]),
+                })
+            } else {
+                BackgroundData::Image(self.data.clone())
+            }
+    }
+}
+
 impl Image {
     pub fn new(width: usize, height: usize, background: Colors) -> Self {
         let color_slice: &[u8] = match background {
@@ -2778,6 +2890,9 @@ impl Image {
         }
     }
 }
+
+
+
 
 
 #[cfg(test)]
