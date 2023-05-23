@@ -92,6 +92,13 @@ pub enum Colors {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+/// An enum that holds the error information for [Drawing] trait
+pub enum DrawingError {
+    InvalidColor,
+    InvalidOpacity,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 /// An enum that holds the image type information
 pub enum ImageType {
     /// An image with 8-bit grayscale pixels
@@ -198,6 +205,15 @@ impl Display for Colors {
             Colors::RGBA8(value) => write!(f, "RGBA8({:?})", value),
             Colors::RGB16(value) => write!(f, "RGB16({:?})", value),
             Colors::RGBA16(value) => write!(f, "RGBA16({:?})", value),
+        }
+    }
+}
+
+impl Display for DrawingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DrawingError::InvalidColor => write!(f, "DrawingError: Invalid color!"),
+            DrawingError::InvalidOpacity => write!(f, "DrawingError: Invalid opacity value!"),
         }
     }
 }
@@ -326,7 +342,44 @@ impl From<ImageType> for ColorType {
 pub trait Conversions {}
 
 /// A trait for drawing on images.
-pub trait Drawing {}
+pub trait Drawing {
+
+    /// Draws a circle on the image. If the circle is not fully contained in the image, it will be clipped.
+    /// # Arguments
+    /// * ```center``` - The coordinates of the center of the circle.
+    /// * ```radius``` - The radius of the circle.
+    /// * ```color``` - The color of the circle.
+    /// * ```thickness``` - The thickness of the circle. If the thickness is 0, the circle will be filled.
+    /// * ```opacity``` - The opacity of the circle.
+    fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError>;
+
+    /// Draws an ellipse on the image. If the ellipse is not fully contained in the image, it will be clipped.
+    /// # Arguments
+    /// * ```center``` - The coordinates of the center of the ellipse.
+    /// * ```axes``` - The lengths of the axes of the ellipse.
+    /// * ```color``` - The color of the ellipse.
+    /// * ```thickness``` - The thickness of the ellipse. If the thickness is 0, the ellipse will be filled.
+    /// * ```opacity``` - The opacity of the ellipse.
+    fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError>;
+
+    /// Draws a line on the image. If the line is not fully contained in the image, it will be clipped.
+    /// # Arguments
+    /// * ```point1``` - The coordinates of the first point of the line.
+    /// * ```point2``` - The coordinates of the second point of the line.
+    /// * ```color``` - The color of the line.
+    /// * ```thickness``` - The thickness of the line.
+    /// * ```opacity``` - The opacity of the line.
+    fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError>;
+
+    /// Draws a rectangle on the image. If the rectangle is not fully contained in the image, it will be clipped.
+    /// # Arguments
+    /// * ```point1``` - The coordinates of the first point of the rectangle.
+    /// * ```point2``` - The coordinates of the second point of the rectangle.
+    /// * ```color``` - The color of the rectangle.
+    /// * ```thickness``` - The thickness of the rectangle. If the thickness is 0, the rectangle will be filled.
+    /// * ```opacity``` - The opacity of the rectangle.
+    fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError>;
+}
 
 /// A trait for indexing into image data
 pub trait Indexing {
@@ -482,22 +535,6 @@ pub trait Utilities {
 
 /*
 impl Image<[u8; 3]> {
-    pub fn clear(&mut self) {
-        //! Clears ```data``` of any drawings (resets it to the state it was in when [Image] was created, unless [Image::set_background_color()] was used).
-
-        match &self.background_data {
-            BackgroundData::Color(color) => self.data.fill(*color),
-            BackgroundData::Image(img) => self.data = img.clone(),
-        }
-    }
-
-    pub fn set_background_color(&mut self, color: [u8; 3]) {
-        //! Sets a new color that will be used as background.
-        //! This only changes internal background data, if you want to apply this to image, call [Image::clear()] after this.
-
-        self.background_data = BackgroundData::Color(color);
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub fn draw_line(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, color: [u8; 3], thickness: usize, opacity: f64) {
         //! Draws a new line. `x1`, `y1` are coordinates of the starting point. `x2`, `y2` are coordinates of the ending point.
@@ -707,121 +744,7 @@ impl Image<[u8; 3]> {
         //! `thickness` defines how thick the rectangle will be. (thickness is added to the inside of the rectangle). If set to 0, the rectangle will be filled.
         //! `opacity` sets the transparency of the rectangle. `<= 0.0` means the rectangle will be completely transparent, while `>= 1.0` means the rectangle won't be transparent.
 
-        // if opacity is 0.0, or less, then rectangle is transparent, nothing is to be drawn.
-        if opacity >= 0.0 {
 
-            // find corners
-            let mut smaller_x = min(x1, x2);
-            let mut bigger_x = max(x1, x2);
-            let mut smaller_y = min(y1, y2);
-            let mut bigger_y = max(y1, y2);
-            if bigger_x >= self.width {
-                bigger_x = self.width - 1;
-            }
-            if bigger_y >= self.height {
-                bigger_y = self.height - 1;
-            }
-
-            if thickness == 0 {
-                if opacity >= 1.0 {
-                    // Draw filled, solid rectangle.
-                    // draws line by line
-                    for y in smaller_y..(bigger_y + 1) {
-                        let base_location = self.width * (self.height - 1 - y);
-                        self.data[(base_location + smaller_x)..(base_location + bigger_x + 1)].fill(color);
-                    }
-                } else {
-                    // Draw filled, transparent rectangle.
-                    // draws each pixel by blending it to the background (because of transparency)
-                    let reverse_opacity = 1.0 - opacity;
-                    for y in smaller_y..(bigger_y + 1) {
-                        let base_location = self.width * (self.height - 1 - y);  // base index of line
-                        for x in (base_location + smaller_x)..(base_location + bigger_x + 1) { // range of indexes on that line (horizontal line)
-                            for channel in 0..color.len() {
-                                // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                self.data[x][channel] = ((self.data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
-                            }
-                        }
-                    }
-                }
-            } else {
-                if opacity >= 1.0 {
-                    // Draw rectangle, solid
-
-                    let mut used_thickness = thickness;  // new thickness variable
-                    // limits maximum thickness
-                    let limit_x = ((bigger_x - smaller_x) / 2) + 1;
-                    let limit_y = ((bigger_y - smaller_y) / 2) + 1;
-                    if (thickness > limit_x) || (thickness > limit_y) {
-                        used_thickness = min(limit_x, limit_y);
-                    }
-
-                    // draw smaller and smaller rectangles until given thickness is achieved
-                    while used_thickness > 0 {
-                        used_thickness -= 1;
-
-                        // draw horizontal sides
-                        self.data[(self.width * (self.height - 1 - smaller_y) + smaller_x)..(self.width * (self.height - 1 - smaller_y) + bigger_x + 1)].fill(color);
-                        self.data[(self.width * (self.height - 1 - bigger_y) + smaller_x)..(self.width * (self.height - 1 - bigger_y) + bigger_x + 1)].fill(color);
-                        // draw vertical sides
-                        for y in (smaller_y + 1)..bigger_y {
-                            let base_location = self.width * (self.height - 1 - y);
-                            self.data[base_location + smaller_x] = color;
-                            self.data[base_location + bigger_x] = color;
-                        }
-
-                        smaller_x += 1;
-                        smaller_y += 1;
-                        bigger_x -= 1;
-                        bigger_y -= 1;
-                    }
-                } else {
-                    // Draw rectangle, transparent
-
-                    let mut used_thickness = thickness; // new variable used for thickness
-                    // limits maximum thickness
-                    let limit_x = ((bigger_x - smaller_x) / 2) + 1;
-                    let limit_y = ((bigger_y - smaller_y) / 2) + 1;
-                    if (thickness > limit_x) || (thickness > limit_y) {
-                        used_thickness = min(limit_x, limit_y);
-                    }
-
-                    let reverse_opacity = 1.0 - opacity;  // no explicit meaning, just used as a value when blending (to reduce unnecessary calculations)
-
-                    while used_thickness > 0 {
-                        used_thickness -= 1;
-
-                        // draw horizontal sides
-                        for y in [smaller_y, bigger_y] {  // bottom and top side
-                            let base_location = self.width * (self.height - 1 - y);  // starting index of line where sides are
-                            for x in (base_location + smaller_x)..(base_location + bigger_x + 1) {  // pixels in those sides
-                                for channel in 0..color.len() {
-                                    // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                    self.data[x][channel] = ((self.data[x][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
-                                }
-                            }
-                        }
-
-                        // draw vertical sides
-                        for y in (smaller_y + 1)..bigger_y {
-                            let base_location = self.width * (self.height - 1 - y);
-                            for x in [smaller_x, bigger_x] {
-                                let ind_location = base_location + x;
-                                for channel in 0..color.len() {
-                                    // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
-                                    self.data[ind_location][channel] = ((self.data[ind_location][channel] as f64) * reverse_opacity + (color[channel] as f64) * opacity).round() as u8;
-                                }
-                            }
-                        }
-
-                        smaller_x += 1;
-                        smaller_y += 1;
-                        bigger_x -= 1;
-                        bigger_y -= 1;
-                    }
-                }
-            }
-        }
     }
 
     #[allow(clippy::collapsible_else_if)]
@@ -1699,6 +1622,137 @@ impl Image<[u8; 3]> {
     }
 }
 */
+
+impl Drawing for Image {
+    fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
+        todo!()
+    }
+    fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
+        todo!()
+    }
+    fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
+        todo!()
+    }
+    fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
+
+        // check if color is valid for this image type
+        if ImageType::from(color) != self.image_type {
+            return Err(DrawingError::InvalidColor);
+        }
+
+        // if opacity is less than 0.0, bigger than 1.0, or NaN, return error
+        if opacity.is_nan() || !(0.0..=1.0).contains(&opacity) {
+            return Err(DrawingError::InvalidOpacity);
+        }
+
+        // if opacity is 0.0, nothing is to be drawn
+        if opacity == 0.0 {
+            return Ok(());
+        }
+
+        // find corners
+        let mut smaller_x = min(point1.0, point2.0);
+        let mut bigger_x = max(point1.0, point2.0);
+        let mut smaller_y = min(point1.1, point2.1);
+        let mut bigger_y = max(point1.1, point2.1);
+        if smaller_x >= self.width || smaller_y >= self.height {
+            return Ok(());  // rectangle is out of image, nothing is to be drawn.
+        }
+
+        if thickness == 0 {
+            if bigger_x >= self.width {
+                bigger_x = self.width - 1;
+            }
+            if bigger_y >= self.height {
+                bigger_y = self.height - 1;
+            }
+
+            if opacity >= 1.0 {
+                // Draw filled, solid rectangle.
+                self.fill_unchecked((smaller_x..(bigger_x + 1), smaller_y..(bigger_y + 1)), color);
+            } else {
+                // Draw filled, transparent rectangle.
+                self.fill_transparent_unchecked((smaller_x..(bigger_x + 1), smaller_y..(bigger_y + 1)), color, opacity);
+            }
+        } else {
+            // new thickness variable, as it will be modified
+            let mut used_thickness = thickness;
+            // find maximum possible thickness
+            let limit_x = (bigger_x - smaller_x) / 2 + 1;
+            let limit_y = (bigger_y - smaller_y) / 2 + 1;
+            if (thickness > limit_x) || (thickness > limit_y) {
+                used_thickness = min(limit_x, limit_y);
+            }
+            used_thickness = min(used_thickness, self.width - smaller_x);
+            used_thickness = min(used_thickness, self.height - smaller_y);
+
+            // draw smaller and smaller rectangles until given thickness is achieved
+            if opacity >= 1.0 {
+                // Draw rectangle, solid
+
+                while used_thickness > 0 {
+                    if bigger_x == smaller_x {
+                        if bigger_y == smaller_y {
+                            self.set_unchecked((smaller_x, smaller_y), color);
+                        } else {
+                            self.fill_unchecked((smaller_x..(smaller_x + 1), smaller_y..min(self.height, bigger_y + 1)), color);
+                        }
+                    } else if bigger_y == smaller_y {
+                        self.fill_unchecked((smaller_x..min(self.width, bigger_x + 1), smaller_y..(smaller_y + 1)), color);
+                    } else {
+                        self.fill_unchecked((smaller_x..min(self.width, bigger_x + 1), smaller_y..(smaller_y + 1)), color);  // bottom
+                        if bigger_y < self.height {
+                            self.fill_unchecked((smaller_x..min(self.width, bigger_x + 1), bigger_y..(bigger_y + 1)), color);  // top
+                        }
+                        self.fill_unchecked((smaller_x..(smaller_x + 1), (smaller_y + 1)..min(bigger_y, self.height)), color);  // left
+                        if bigger_x < self.width {
+                            self.fill_unchecked((bigger_x..(bigger_x + 1), (smaller_y + 1)..min(bigger_y, self.height)), color);  // right
+                        }
+                    }
+
+                    smaller_x += 1;
+                    smaller_y += 1;
+                    bigger_x -= 1;
+                    bigger_y -= 1;
+
+                    used_thickness -= 1;
+                }
+            } else {
+                // Draw rectangle, transparent
+
+                while used_thickness > 0 {
+                    if bigger_x == smaller_x {
+                        if bigger_y == smaller_y {
+                            self.set_transparent_unchecked((smaller_x, smaller_y), color, opacity);
+                        } else {
+                            self.fill_transparent_unchecked((smaller_x..(smaller_x + 1), smaller_y..min(self.height, bigger_y + 1)), color, opacity);
+                        }
+                    } else if bigger_y == smaller_y {
+                        self.fill_transparent_unchecked((smaller_x..min(self.width, bigger_x + 1), smaller_y..(smaller_y + 1)), color, opacity);
+                    } else {
+                        self.fill_transparent_unchecked((smaller_x..min(self.width, bigger_x + 1), smaller_y..(smaller_y + 1)), color, opacity);  // bottom
+                        if bigger_y < self.height {
+                            self.fill_transparent_unchecked((smaller_x..min(self.width, bigger_x + 1), bigger_y..(bigger_y + 1)), color, opacity);  // top
+                        }
+                        self.fill_transparent_unchecked((smaller_x..(smaller_x + 1), (smaller_y + 1)..min(bigger_y, self.height)), color, opacity);  // left
+                        if bigger_x < self.width {
+                            self.fill_transparent_unchecked((bigger_x..(bigger_x + 1), (smaller_y + 1)..min(bigger_y, self.height)), color, opacity);  // right
+                        }
+                    }
+
+                    smaller_x += 1;
+                    smaller_y += 1;
+                    bigger_x -= 1;
+                    bigger_y -= 1;
+
+                    used_thickness -= 1;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
 
 impl Indexing for Image {
 
@@ -2898,6 +2952,27 @@ impl Image {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drawing_rectangle() {
+        let mut image = Image::new(100, 100, Colors::RGB8([255, 255, 255]));
+
+        // test errors
+        if image.draw_rectangle((0, 0), (10, 10), Colors::RGBA8([0, 0, 0, 0]), 1, 1.0).is_ok() { panic!("Should fail!") }
+        if image.draw_rectangle((0, 0), (10, 10), Colors::RGB8([0, 0, 0]), 0, 1.1).is_ok() { panic!("Should fail!") }
+
+        // test drawing
+        image.draw_rectangle((0, 0), (10, 10), Colors::RGB8([0, 0, 0]), 1, 1.0).unwrap();
+        image.draw_rectangle((20, 20), (31, 31), Colors::RGB8([0, 0, 0]), 1, 0.5).unwrap();
+        image.draw_rectangle((40, 40), (50, 50), Colors::RGB8([0, 0, 0]), 3, 1.0).unwrap();
+        image.draw_rectangle((60, 60), (70, 70), Colors::RGB8([0, 0, 0]), 3, 0.5).unwrap();
+        image.draw_rectangle((80, 80), (90, 90), Colors::RGB8([0, 0, 0]), 0, 1.0).unwrap();
+        image.draw_rectangle((10, 90), (20, 80), Colors::RGB8([0, 0, 0]), 0, 0.5).unwrap();
+        image.draw_rectangle((30, 70), (40, 60), Colors::RGB8([0, 0, 0]), 1000000, 1.0).unwrap();
+        image.draw_rectangle((80, 10), (90, 30), Colors::RGB8([0, 0, 0]), 1000000, 0.5).unwrap();
+
+        // image.to_file("test_drawing_rectangle.png", true).unwrap();
+    }
 
     #[test]
     fn io_bytes() {
