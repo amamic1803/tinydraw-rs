@@ -1,42 +1,49 @@
 //! A module that contains the [Image] struct and related functions.
 
-use std::cmp::{min, max};
-use std::f64::consts::FRAC_1_SQRT_2;
-use std::fmt::Display;
-use std::ops::{Bound, RangeBounds};
-use std::ptr::slice_from_raw_parts;
 
-#[cfg(feature = "file_io")]
-use std::fs::remove_file;
-#[cfg(feature = "file_io")]
-use std::path::Path;
-#[cfg(feature = "file_io")]
-use std::io::ErrorKind;
+// standard library imports
+use std::{
+    cmp::{min, max},
+    error::Error,
+    f64::consts::FRAC_1_SQRT_2,
+    fmt::Display,
+    ops::{Bound, RangeBounds},
+    ptr::slice_from_raw_parts,
+};
 
+// standard library imports when file_io feature is enabled
 #[cfg(feature = "file_io")]
-use image_io::{ColorType, DynamicImage};
+use std::{
+    fs::remove_file,
+    io::ErrorKind,
+    path::Path,
+};
+
+// external library imports when file_io feature is enabled
 #[cfg(feature = "file_io")]
-use image_io::error::ImageError;
-#[cfg(feature = "file_io")]
-use image_io::io::Reader;
-#[cfg(feature = "file_io")]
-use image_io::save_buffer;
+use image_io::{
+    ColorType,
+    DynamicImage,
+    save_buffer,
+    error::ImageError,
+    io::Reader as ImageReader,
+};
 
 
 
 
 
-#[derive(Debug, Eq, PartialEq)]
 /// A struct that holds an image
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Image {
     /// The image pixel data
-    pub data: Vec<u8>,
+    data: Vec<u8>,
     /// The width of the image
-    pub width: usize,
+    width: usize,
     /// The height of the image
-    pub height: usize,
+    height: usize,
     /// The type of the image
-    pub image_type: ImageType,
+    image_type: ImageType,
     /// The background of the image
     background_data: BackgroundData
 }
@@ -53,7 +60,7 @@ impl Display for Image {
             ImageType::RGB16 => self.data.len() * 2,
             ImageType::RGBA16 => self.data.len() * 2,
         };
-        write!(f, "Image:\n   dimensions: {}x{}\n   type: {}   size: {} bytes", self.width, self.height, self.image_type, img_size)
+        write!(f, "Image:\n   - dimensions: {}x{}\n   - type: {}   - size: {} bytes", self.width, self.height, self.image_type, img_size)
     }
 }
 
@@ -61,8 +68,8 @@ impl Display for Image {
 
 
 
-#[derive(Debug, Clone, Eq, PartialEq)]
 /// An enum that holds the background information for [Image]
+#[derive(Debug, Clone, Eq, PartialEq)]
 enum BackgroundData {
     /// The background is a color
     Color(Colors),
@@ -70,8 +77,8 @@ enum BackgroundData {
     Image(Vec<u8>)
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 /// An enum that holds the
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Colors {
     /// The 8-bit grayscale color
     GRAY8(u8),
@@ -91,15 +98,8 @@ pub enum Colors {
     RGBA16([u16; 4]),
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-/// An enum that holds the error information for [Drawing] trait
-pub enum DrawingError {
-    InvalidColor,
-    InvalidOpacity,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 /// An enum that holds the image type information
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ImageType {
     /// An image with 8-bit grayscale pixels
     GRAY8,
@@ -119,19 +119,28 @@ pub enum ImageType {
     RGBA16,
 }
 
+/// An enum that holds the error information for [Drawing] trait
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum DrawingError {
+    /// The given color is wrong
+    WrongColor,
+    /// The invalid opacity value
+    InvalidOpacity,
+}
+
 /// An enum that holds the error information for [Indexing] trait
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum IndexingError {
     /// The invalid opacity value
     InvalidOpacity,
     /// The index is out of bounds
     OutOfBounds,
-    /// Given color is wrong
+    /// The given color is wrong
     WrongColor,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 /// An enum that holds the error information for [IO] trait
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum IOError {
     /// Error while decoding the image
     Decoding,
@@ -209,15 +218,6 @@ impl Display for Colors {
     }
 }
 
-impl Display for DrawingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DrawingError::InvalidColor => write!(f, "DrawingError: Invalid color!"),
-            DrawingError::InvalidOpacity => write!(f, "DrawingError: Invalid opacity value!"),
-        }
-    }
-}
-
 impl Display for ImageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -229,6 +229,15 @@ impl Display for ImageType {
             ImageType::RGBA8 => write!(f, "RGBA8"),
             ImageType::RGB16 => write!(f, "RGB16"),
             ImageType::RGBA16 => write!(f, "RGBA16"),
+        }
+    }
+}
+
+impl Display for DrawingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DrawingError::WrongColor => write!(f, "DrawingError: Wrong color!"),
+            DrawingError::InvalidOpacity => write!(f, "DrawingError: Invalid opacity value!"),
         }
     }
 }
@@ -259,6 +268,12 @@ impl Display for IOError {
         }
     }
 }
+
+impl Error for DrawingError {}
+
+impl Error for IndexingError {}
+
+impl Error for IOError {}
 
 impl From<Colors> for ImageType {
     fn from(color: Colors) -> Self {
@@ -339,7 +354,11 @@ impl From<ImageType> for ColorType {
 
 
 /// A trait for converting between different color/image types.
-pub trait Conversions {}
+pub trait Conversions {
+
+    /// Converts the image to the specified color type.
+    fn convert(&mut self, image_type: ImageType);
+}
 
 /// A trait for drawing on images.
 pub trait Drawing {
@@ -522,8 +541,33 @@ pub trait IO {
 /// A trait with useful functions for images.
 pub trait Utilities {
 
+    /// Returns the bytes of the image as a slice.
+    /// Equivalent to [IO::to_bytes_ref].
+    /// If you want to edit the data, use [IO::to_bytes_ref_mut] or [Indexing] trait.
+    /// # Returns
+    /// * The bytes of the image.
+    fn data(&self) -> &[u8];
+
+    /// Returns the width of the image.
+    /// # Returns
+    /// * The width of the image.
+    fn width(&self) -> usize;
+
+    /// Returns the height of the image.
+    /// # Returns
+    /// * The height of the image.
+    fn height(&self) -> usize;
+
+    /// Returns the type of the image.
+    /// # Returns
+    /// * The type of the image.
+    fn image_type(&self) -> ImageType;
+
     /// Deletes all drawings, restores image to match the saved background.
     fn clear(&mut self);
+
+    /// Fills the whole image with the given value.
+    fn fill_image(&mut self, color: Colors) -> Result<(), DrawingError>;
 
     /// Saves the current state of the image as background.
     fn save_background(&mut self);
@@ -1637,7 +1681,7 @@ impl Drawing for Image {
 
         // check if color is valid for this image type
         if ImageType::from(color) != self.image_type {
-            return Err(DrawingError::InvalidColor);
+            return Err(DrawingError::WrongColor);
         }
 
         // if opacity is less than 0.0, bigger than 1.0, or NaN, return error
@@ -1836,6 +1880,8 @@ impl Indexing for Image {
     fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), IndexingError> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(IndexingError::OutOfBounds)
+        } else if ImageType::from(color) != self.image_type {
+            Err(IndexingError::WrongColor)
         } else {
             self.set_unchecked(index, color);
             Ok(())
@@ -1900,6 +1946,8 @@ impl Indexing for Image {
     fn set_transparent(&mut self, index: (usize, usize), color: Colors, opacity: f64) -> Result<(), IndexingError> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(IndexingError::OutOfBounds)
+        } else if ImageType::from(color) != self.image_type {
+            Err(IndexingError::WrongColor)
         } else if opacity.is_nan() {
             Err(IndexingError::InvalidOpacity)
         } else {
@@ -2061,6 +2109,10 @@ impl Indexing for Image {
                 self.height
             }
         };
+
+        if ImageType::from(color) != self.image_type {
+            return Err(IndexingError::WrongColor);
+        }
 
         match color {
             Colors::GRAY8(val) => {
@@ -2376,6 +2428,10 @@ impl Indexing for Image {
                 self.height
             }
         };
+
+        if ImageType::from(color) != self.image_type {
+            return Err(IndexingError::WrongColor);
+        }
 
         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
 
@@ -2770,7 +2826,7 @@ impl IO for Image {
     fn from_file(path: &str) -> Result<Image, IOError> {
 
         let image: DynamicImage = match (
-            match Reader::open(path) {
+            match ImageReader::open(path) {
                 Ok(image) => image,
                 Err(err_type) => return Err(IOError::from(err_type.kind())),
             }
@@ -2807,12 +2863,32 @@ impl IO for Image {
                 return Err(IOError::FileExists);
             }
         }
-        save_buffer(Path::new(path), self.to_bytes_ref(), self.width as u32, self.height as u32, ColorType::from(self.image_type))?;
+        save_buffer(file_path, self.to_bytes_ref(), self.width as u32, self.height as u32, ColorType::from(self.image_type))?;
         Ok(())
     }
 }
 
 impl Utilities for Image {
+
+    #[inline]
+    fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    #[inline]
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    #[inline]
+    fn height(&self) -> usize {
+        self.height
+    }
+
+    #[inline]
+    fn image_type(&self) -> ImageType {
+        self.image_type
+    }
 
     fn clear(&mut self) {
         match &self.background_data {
@@ -2836,6 +2912,14 @@ impl Utilities for Image {
                 self.data = background_bytes.clone();
             },
         }
+    }
+
+    fn fill_image(&mut self, color: Colors) -> Result<(), DrawingError> {
+        if ImageType::from(color) != self.image_type {
+            return Err(DrawingError::WrongColor);
+        }
+        self.fill_unchecked((.., ..), color);
+        Ok(())
     }
 
     fn save_background(&mut self) {
@@ -2972,6 +3056,58 @@ mod tests {
         image.draw_rectangle((80, 10), (90, 30), Colors::RGB8([0, 0, 0]), 1000000, 0.5).unwrap();
 
         // image.to_file("test_drawing_rectangle.png", true).unwrap();
+    }
+
+    #[test]
+    fn utilities_fields() {
+        let image = Image::new(100, 100, Colors::GRAY8(255));
+
+        assert_eq!(image.data(), &vec![255; 100 * 100]);
+        assert_eq!(image.data(), &image.data);
+
+        assert_eq!(image.width(), 100);
+        assert_eq!(image.width(), image.width);
+
+        assert_eq!(image.height(), 100);
+        assert_eq!(image.height(), image.height);
+
+        assert_eq!(image.image_type(), ImageType::GRAY8);
+        assert_eq!(image.image_type(), image.image_type);
+    }
+
+    #[test]
+    fn utilities_background() {
+        let mut image = Image::new(100, 100, Colors::RGB8([100, 120, 140]));
+        let image_original = image.clone();
+
+        if image.fill_image(Colors::GRAY8(255)).is_ok() { panic!("Should fail!") }
+
+        image.fill_image(Colors::RGB8([0, 0, 0])).unwrap();
+        assert_ne!(image, image_original);
+
+        image.clear();
+        assert_eq!(image, image_original);
+
+        image.fill_image(Colors::RGB8([130, 150, 170])).unwrap();
+        image.save_background();
+        image.clear();
+        assert_ne!(image, image_original);
+        assert_eq!(image.background_data, BackgroundData::Color(Colors::RGB8([130, 150, 170])));
+
+        image.fill_image(Colors::RGB8([100, 120, 140])).unwrap();
+        image.save_background();
+        image.clear();
+        assert_eq!(image, image_original);
+        assert_eq!(image.background_data, BackgroundData::Color(Colors::RGB8([100, 120, 140])));
+
+        image.set((0, image.height - 1), Colors::RGB8([0, 0, 0])).unwrap();
+        image.save_background();
+        image.clear();
+        assert_ne!(image, image_original);
+
+        let mut vec_to_match: Vec<u8> = [100, 120, 140].repeat(image.width * image.height);
+        vec_to_match[..3].fill(0);
+        assert_eq!(image.background_data, BackgroundData::Image(vec_to_match));
     }
 
     #[test]
