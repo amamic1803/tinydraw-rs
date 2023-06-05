@@ -358,6 +358,20 @@ pub trait Conversions {
 
     /// Converts the image to the specified color type.
     fn convert(&mut self, image_type: ImageType);
+
+    /// Checks if conversion to the specified color type is lossless.
+    /// # Arguments
+    /// * ```image_type``` - The color type to which the image will be converted.
+    /// # Returns
+    /// * ```true``` - If the conversion is lossless.
+    fn lossless_cvt(&self, image_type: ImageType) -> bool;
+
+    /// Checks if conversion to the specified color type is lossy.
+    /// # Arguments
+    /// * ```image_type``` - The color type to which the image will be converted.
+    /// # Returns
+    /// * ```true``` - If the conversion is lossy.
+    fn lossy_cvt(&self, image_type: ImageType) -> bool;
 }
 
 /// A trait for drawing on images.
@@ -1667,16 +1681,347 @@ impl Image<[u8; 3]> {
 }
 */
 
+impl Conversions for Image {
+
+    fn convert(&mut self, image_type: ImageType) {
+        match self.image_type {
+            ImageType::GRAY8 => {
+                match image_type {
+                    ImageType::GRAY8 => {}, // do nothing (same type)
+                    ImageType::GRAYA8 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len);
+                        for _ in 0..original_len {
+                            self.data.push(255);
+                        }
+
+                        for i in (0..original_len).rev() {
+                            self.data[i * 2] = self.data[i];
+                        }
+                        for i in (1..original_len).step_by(2) {
+                            self.data[i] = 255;
+                        }
+
+                        self.image_type = ImageType::GRAYA8;
+                    },
+                    ImageType::GRAY16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len);
+                        for _ in 0..original_len {
+                            self.data.push(0);
+                        }
+
+                        let mul_const: f64 = u16::MAX as f64 / u8::MAX as f64;
+                        for i in (0..original_len).rev() {
+                            let new_val: u16 = (self.data[i] as f64 * mul_const).round() as u16;
+                            let new_loc: usize = i * 2;
+                            self.data[new_loc] = (new_val >> 8) as u8;
+                            self.data[new_loc + 1] = new_val as u8;
+                        }
+
+                        self.image_type = ImageType::GRAY16;
+                    },
+                    ImageType::GRAYA16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 3);
+                        for _ in 0..(original_len * 3) {
+                            self.data.push(255);
+                        }
+
+                        let mul_const: f64 = u16::MAX as f64 / u8::MAX as f64;
+                        for i in (0..original_len).rev() {
+                            let new_val: u16 = (self.data[i] as f64 * mul_const).round() as u16;
+                            let new_loc: usize = i * 4;
+                            self.data[new_loc] = (new_val >> 8) as u8;
+                            self.data[new_loc + 1] = new_val as u8;
+                        }
+
+                        for i in (2..original_len).step_by(4) {
+                            self.data[i] = 255;
+                            self.data[i + 1] = 255;
+                        }
+
+                        self.image_type = ImageType::GRAYA16;
+                    },
+                    ImageType::RGB8 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 2);
+                        for _ in 0..(original_len * 2) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).rev() {
+                            let new_loc: usize = i * 3;
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i];
+                            self.data[new_loc + 2] = self.data[i];
+                        }
+
+                        self.image_type = ImageType::RGB8;
+                    },
+                    ImageType::RGBA8 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 3);
+                        for _ in 0..(original_len * 3) {
+                            self.data.push(255);
+                        }
+
+                        for i in (0..original_len).rev() {
+                            let new_loc: usize = i * 4;
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i];
+                            self.data[new_loc + 2] = self.data[i];
+                        }
+
+                        for i in (3..original_len).step_by(4) {
+                            self.data[i] = 255;
+                        }
+
+                        self.image_type = ImageType::RGBA8;
+                    },
+                    ImageType::RGB16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 5);
+                        for _ in 0..(original_len * 5) {
+                            self.data.push(0);
+                        }
+
+                        let mul_const: f64 = u16::MAX as f64 / u8::MAX as f64;
+                        for i in (0..original_len).rev() {
+                            let new_val: u16 = (self.data[i] as f64 * mul_const).round() as u16;
+                            let new_loc: usize = i * 6;
+                            self.data[new_loc] = (new_val >> 8) as u8;
+                            self.data[new_loc + 1] = new_val as u8;
+                            self.data[new_loc + 2] = (new_val >> 8) as u8;
+                            self.data[new_loc + 3] = new_val as u8;
+                            self.data[new_loc + 4] = (new_val >> 8) as u8;
+                            self.data[new_loc + 5] = new_val as u8;
+                        }
+
+                        self.image_type = ImageType::RGB16;
+                    },
+                    ImageType::RGBA16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 7);
+                        for _ in 0..(original_len * 7) {
+                            self.data.push(255);
+                        }
+
+                        let mul_const: f64 = u16::MAX as f64 / u8::MAX as f64;
+                        for i in (0..original_len).rev() {
+                            let new_val: u16 = (self.data[i] as f64 * mul_const).round() as u16;
+                            let new_loc: usize = i * 8;
+                            self.data[new_loc] = (new_val >> 8) as u8;
+                            self.data[new_loc + 1] = new_val as u8;
+                            self.data[new_loc + 2] = (new_val >> 8) as u8;
+                            self.data[new_loc + 3] = new_val as u8;
+                            self.data[new_loc + 4] = (new_val >> 8) as u8;
+                            self.data[new_loc + 5] = new_val as u8;
+                        }
+
+                        for i in (6..original_len).step_by(8) {
+                            self.data[i] = 255;
+                            self.data[i + 1] = 255;
+                        }
+
+                        self.image_type = ImageType::RGBA16;
+                    },
+                }
+            },
+            ImageType::GRAYA8 => {
+                match image_type {
+                    ImageType::GRAY8 => {},
+                    ImageType::GRAYA8 => {},
+                    ImageType::GRAY16 => {},
+                    ImageType::GRAYA16 => {},
+                    ImageType::RGB8 => {},
+                    ImageType::RGBA8 => {},
+                    ImageType::RGB16 => {},
+                    ImageType::RGBA16 => {},
+                }
+            },
+            ImageType::GRAY16 => {
+                match image_type {
+                    ImageType::GRAY8 => {},
+                    ImageType::GRAYA8 => {},
+                    ImageType::GRAY16 => {},
+                    ImageType::GRAYA16 => {},
+                    ImageType::RGB8 => {},
+                    ImageType::RGBA8 => {},
+                    ImageType::RGB16 => {},
+                    ImageType::RGBA16 => {},
+                }
+            },
+            ImageType::GRAYA16 => {
+                match image_type {
+                    ImageType::GRAY8 => {},
+                    ImageType::GRAYA8 => {},
+                    ImageType::GRAY16 => {},
+                    ImageType::GRAYA16 => {},
+                    ImageType::RGB8 => {},
+                    ImageType::RGBA8 => {},
+                    ImageType::RGB16 => {},
+                    ImageType::RGBA16 => {},
+                }
+            },
+            ImageType::RGB8 => {
+                match image_type {
+                    ImageType::GRAY8 => {},
+                    ImageType::GRAYA8 => {},
+                    ImageType::GRAY16 => {},
+                    ImageType::GRAYA16 => {},
+                    ImageType::RGB8 => {},
+                    ImageType::RGBA8 => {},
+                    ImageType::RGB16 => {},
+                    ImageType::RGBA16 => {},
+                }
+            },
+            ImageType::RGBA8 => {
+                match image_type {
+                    ImageType::GRAY8 => {},
+                    ImageType::GRAYA8 => {},
+                    ImageType::GRAY16 => {},
+                    ImageType::GRAYA16 => {},
+                    ImageType::RGB8 => {},
+                    ImageType::RGBA8 => {},
+                    ImageType::RGB16 => {},
+                    ImageType::RGBA16 => {},
+                }
+            },
+            ImageType::RGB16 => {
+                match image_type {
+                    ImageType::GRAY8 => {},
+                    ImageType::GRAYA8 => {},
+                    ImageType::GRAY16 => {},
+                    ImageType::GRAYA16 => {},
+                    ImageType::RGB8 => {},
+                    ImageType::RGBA8 => {},
+                    ImageType::RGB16 => {},
+                    ImageType::RGBA16 => {},
+                }
+            },
+            ImageType::RGBA16 => {
+                match image_type {
+                    ImageType::GRAY8 => {},
+                    ImageType::GRAYA8 => {},
+                    ImageType::GRAY16 => {},
+                    ImageType::GRAYA16 => {},
+                    ImageType::RGB8 => {},
+                    ImageType::RGBA8 => {},
+                    ImageType::RGB16 => {},
+                    ImageType::RGBA16 => {},
+                }
+            },
+        }
+    }
+
+    fn lossless_cvt(&self, image_type: ImageType) -> bool {
+        match self.image_type {
+            ImageType::GRAY8 => true,
+            ImageType::GRAYA8 => {
+                match image_type {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => true,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => true,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => true,
+                    ImageType::RGB16 => false,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::GRAY16 => {
+                match image_type {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => true,
+                    ImageType::GRAYA16 => true,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => false,
+                    ImageType::RGB16 => true,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::GRAYA16 => {
+                match image_type {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => true,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => false,
+                    ImageType::RGB16 => false,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::RGB8 => {
+                match image_type {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => false,
+                    ImageType::RGB8 => true,
+                    ImageType::RGBA8 => true,
+                    ImageType::RGB16 => true,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::RGBA8 => {
+                match image_type {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => false,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => true,
+                    ImageType::RGB16 => false,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::RGB16 => {
+                match image_type {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => false,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => false,
+                    ImageType::RGB16 => true,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::RGBA16 => {
+                matches!(image_type, ImageType::RGBA16)
+            },
+        }
+    }
+
+    fn lossy_cvt(&self, image_type: ImageType) -> bool {
+        !self.lossless_cvt(image_type)
+    }
+}
+
 impl Drawing for Image {
+
     fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
         todo!()
     }
+
     fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
         todo!()
     }
+
     fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
         todo!()
     }
+
     fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
 
         // check if color is valid for this image type
