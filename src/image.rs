@@ -356,7 +356,62 @@ impl From<ImageType> for ColorType {
 /// A trait for converting between different color/image types.
 pub trait Conversions {
 
+    /// Converts a u8 color value to a u16 color value.
+    /// # Arguments
+    /// * ```value``` - The u8 color value.
+    /// # Returns
+    /// * The u16 color value.
+    /// # Example
+    /// ```
+    /// use tinydraw::{Image, Conversions};
+    ///
+    /// let value: u8 = 255;
+    /// let converted_value: u16 = <Image as Conversions>::val_u8_to_u16(value);
+    /// assert_eq!(converted_value, 65535_u16);
+    ///
+    /// let value: u8 = 0;
+    /// let converted_value: u16 = <Image as Conversions>::val_u8_to_u16(value);
+    /// assert_eq!(converted_value, 0_u16);
+    ///
+    /// let value: u8 = 128;
+    /// let converted_value: u16 = <Image as Conversions>::val_u8_to_u16(value);
+    /// assert_eq!(converted_value, 32896_u16);
+    /// ```
+    fn val_u8_to_u16(value: u8) -> u16 {
+        // to convert to u16, we multiply by 257
+        value as u16 * 257_u16
+    }
+
+    /// Converts a u16 color value to a u8 color value.
+    /// # Arguments
+    /// * ```value``` - The u16 color value.
+    /// # Returns
+    /// * The u8 color value.
+    /// # Example
+    /// ```
+    /// use tinydraw::{Image, Conversions};
+    ///
+    /// let value: u16 = 65535;
+    /// let converted_value: u8 = <Image as Conversions>::val_u16_to_u8(value);
+    /// assert_eq!(converted_value, 255_u8);
+    ///
+    /// let value: u16 = 0;
+    /// let converted_value: u8 = <Image as Conversions>::val_u16_to_u8(value);
+    /// assert_eq!(converted_value, 0_u8);
+    ///
+    /// let value: u16 = 32896;
+    /// let converted_value: u8 = <Image as Conversions>::val_u16_to_u8(value);
+    /// assert_eq!(converted_value, 128_u8);
+    /// ```
+    fn val_u16_to_u8(value: u16) -> u8 {
+        // to convert to u8, we divide by 257
+        // divide by 257 is the same as multiply by 0.003_891_050_583_657_587_6
+        (value as f64 * 0.003_891_050_583_657_587_6_f64).round() as u8
+    }
+
     /// Converts the image to the specified color type.
+    /// # Arguments
+    /// * ```image_type``` - The color type to which the image will be converted.
     fn convert(&mut self, image_type: ImageType);
 
     /// Checks if conversion to the specified color type is lossless.
@@ -1713,9 +1768,8 @@ impl Conversions for Image {
                             self.data.push(0);
                         }
 
-                        let mul_const: f64 = u16::MAX as f64 / u8::MAX as f64;
                         for i in (0..original_len).rev() {
-                            let new_val: u16 = (self.data[i] as f64 * mul_const).round() as u16;
+                            let new_val: u16 = Self::val_u8_to_u16(self.data[i]);
                             let new_loc: usize = i * 2;
                             self.data[new_loc] = (new_val >> 8) as u8;
                             self.data[new_loc + 1] = new_val as u8;
@@ -1731,9 +1785,8 @@ impl Conversions for Image {
                             self.data.push(255);
                         }
 
-                        let mul_const: f64 = u16::MAX as f64 / u8::MAX as f64;
                         for i in (0..original_len).rev() {
-                            let new_val: u16 = (self.data[i] as f64 * mul_const).round() as u16;
+                            let new_val: u16 = Self::val_u8_to_u16(self.data[i]);
                             let new_loc: usize = i * 4;
                             self.data[new_loc] = (new_val >> 8) as u8;
                             self.data[new_loc + 1] = new_val as u8;
@@ -1792,9 +1845,8 @@ impl Conversions for Image {
                             self.data.push(0);
                         }
 
-                        let mul_const: f64 = u16::MAX as f64 / u8::MAX as f64;
                         for i in (0..original_len).rev() {
-                            let new_val: u16 = (self.data[i] as f64 * mul_const).round() as u16;
+                            let new_val: u16 = Self::val_u8_to_u16(self.data[i]);
                             let new_loc: usize = i * 6;
                             self.data[new_loc] = (new_val >> 8) as u8;
                             self.data[new_loc + 1] = new_val as u8;
@@ -1814,9 +1866,8 @@ impl Conversions for Image {
                             self.data.push(255);
                         }
 
-                        let mul_const: f64 = u16::MAX as f64 / u8::MAX as f64;
                         for i in (0..original_len).rev() {
-                            let new_val: u16 = (self.data[i] as f64 * mul_const).round() as u16;
+                            let new_val: u16 = Self::val_u8_to_u16(self.data[i]);
                             let new_loc: usize = i * 8;
                             self.data[new_loc] = (new_val >> 8) as u8;
                             self.data[new_loc + 1] = new_val as u8;
@@ -1837,38 +1888,363 @@ impl Conversions for Image {
             },
             ImageType::GRAYA8 => {
                 match image_type {
-                    ImageType::GRAY8 => {},
-                    ImageType::GRAYA8 => {},
-                    ImageType::GRAY16 => {},
-                    ImageType::GRAYA16 => {},
-                    ImageType::RGB8 => {},
-                    ImageType::RGBA8 => {},
-                    ImageType::RGB16 => {},
-                    ImageType::RGBA16 => {},
+                    ImageType::GRAY8 => {
+                        // bit shift to the right by 1 == divide by 2
+
+                        for i in (0..self.data.len()).step_by(2) {
+                            self.data[i >> 1] = self.data[i];
+                        }
+
+                        self.data.truncate(self.data.len() >> 1);
+                        self.data.shrink_to_fit();
+
+                        self.image_type = ImageType::GRAY8;
+                    },
+                    ImageType::GRAYA8 => {},  // do nothing (same type)
+                    ImageType::GRAY16 => {
+                        for i in (0..self.data.len()).step_by(2) {
+                            let new_val: u16 = Self::val_u8_to_u16(self.data[i]);
+                            self.data[i] = (new_val >> 8) as u8;
+                            self.data[i + 1] = new_val as u8;
+                        }
+
+                        self.image_type = ImageType::GRAY16;
+                    },
+                    ImageType::GRAYA16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len);
+                        for _ in 0..(original_len) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_val: u16 = Self::val_u8_to_u16(self.data[i]);
+                            let new_transparency: u16 = Self::val_u8_to_u16(self.data[i + 1]);
+                            let new_loc: usize = i * 2;
+                            self.data[new_loc] = (new_val >> 8) as u8;
+                            self.data[new_loc + 1] = new_val as u8;
+                            self.data[new_loc + 2] = (new_transparency >> 8) as u8;
+                            self.data[new_loc + 3] = new_transparency as u8;
+                        }
+
+                        self.image_type = ImageType::GRAYA16;
+                    },
+                    ImageType::RGB8 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len >> 1);
+                        for _ in 0..(original_len >> 1) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_loc: usize = i + (i >> 1);
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i];
+                            self.data[new_loc + 2] = self.data[i];
+                        }
+
+                        self.image_type = ImageType::RGB8;
+                    },
+                    ImageType::RGBA8 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len);
+                        for _ in 0..(original_len) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_loc: usize = i * 2;
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i];
+                            self.data[new_loc + 2] = self.data[i];
+                            self.data[new_loc + 3] = self.data[i + 1];
+                        }
+
+                        self.image_type = ImageType::RGBA8;
+                    },
+                    ImageType::RGB16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 2);
+                        for _ in 0..(original_len * 2) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_val: u16 = Self::val_u8_to_u16(self.data[i]);
+                            let new_loc: usize = i * 3;
+                            self.data[new_loc] = (new_val >> 8) as u8;
+                            self.data[new_loc + 1] = new_val as u8;
+                            self.data[new_loc + 2] = (new_val >> 8) as u8;
+                            self.data[new_loc + 3] = new_val as u8;
+                            self.data[new_loc + 4] = (new_val >> 8) as u8;
+                            self.data[new_loc + 5] = new_val as u8;
+                        }
+
+                        self.image_type = ImageType::RGB16;
+                    },
+                    ImageType::RGBA16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 3);
+                        for _ in 0..(original_len * 3) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_val: u16 = Self::val_u8_to_u16(self.data[i]);
+                            let new_transparency: u16 = Self::val_u8_to_u16(self.data[i + 1]);
+                            let new_loc: usize = i * 4;
+                            self.data[new_loc] = (new_val >> 8) as u8;
+                            self.data[new_loc + 1] = new_val as u8;
+                            self.data[new_loc + 2] = (new_val >> 8) as u8;
+                            self.data[new_loc + 3] = new_val as u8;
+                            self.data[new_loc + 4] = (new_val >> 8) as u8;
+                            self.data[new_loc + 5] = new_val as u8;
+                            self.data[new_loc + 6] = (new_transparency >> 8) as u8;
+                            self.data[new_loc + 7] = new_transparency as u8;
+                        }
+
+                        self.image_type = ImageType::RGBA16;
+                    },
                 }
             },
             ImageType::GRAY16 => {
                 match image_type {
-                    ImageType::GRAY8 => {},
-                    ImageType::GRAYA8 => {},
-                    ImageType::GRAY16 => {},
-                    ImageType::GRAYA16 => {},
-                    ImageType::RGB8 => {},
-                    ImageType::RGBA8 => {},
-                    ImageType::RGB16 => {},
-                    ImageType::RGBA16 => {},
+                    ImageType::GRAY8 => {
+                        for i in (0..self.data.len()).step_by(2) {
+                            self.data[i >> 1] = Self::val_u16_to_u8(((self.data[i] as u16) << 8) | (self.data[i + 1] as u16));
+                        }
+
+                        self.data.truncate(self.data.len() >> 1);
+                        self.data.shrink_to_fit();
+
+                        self.image_type = ImageType::GRAY8;
+                    },
+                    ImageType::GRAYA8 => {
+                        for i in (0..self.data.len()).step_by(2) {
+                            self.data[i] = Self::val_u16_to_u8(((self.data[i] as u16) << 8) | (self.data[i + 1] as u16));
+                            self.data[i + 1] = 255;
+                        }
+
+                        self.image_type = ImageType::GRAYA8;
+                    },
+                    ImageType::GRAY16 => {},  // do nothing (same type)
+                    ImageType::GRAYA16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len);
+                        for _ in 0..(original_len) {
+                            self.data.push(255);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_loc: usize = i * 2;
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i + 1];
+                        }
+
+                        for i in (2..original_len).step_by(4) {
+                            self.data[i] = 255;
+                            self.data[i + 1] = 255;
+                        }
+
+                        self.image_type = ImageType::GRAYA16;
+                    },
+                    ImageType::RGB8 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len >> 1);
+                        for _ in 0..(original_len >> 1) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_val: u8 = Self::val_u16_to_u8(((self.data[i] as u16) << 8) | (self.data[i + 1] as u16));
+                            let new_loc: usize = i + (i >> 1);
+                            self.data[new_loc] = new_val;
+                            self.data[new_loc + 1] = new_val;
+                            self.data[new_loc + 2] = new_val;
+                        }
+
+                        self.image_type = ImageType::RGB16;
+                    },
+                    ImageType::RGBA8 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len);
+                        for _ in 0..(original_len) {
+                            self.data.push(255);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_val: u8 = Self::val_u16_to_u8(((self.data[i] as u16) << 8) | (self.data[i + 1] as u16));
+                            let new_loc: usize = i * 2;
+                            self.data[new_loc] = new_val;
+                            self.data[new_loc + 1] = new_val;
+                            self.data[new_loc + 2] = new_val;
+                        }
+
+                        for i in (3..original_len).step_by(4) {
+                            self.data[i] = 255;
+                        }
+
+                        self.image_type = ImageType::RGBA16;
+                    },
+                    ImageType::RGB16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 2);
+                        for _ in 0..(original_len * 2) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_loc: usize = i * 3;
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i + 1];
+                            self.data[new_loc + 2] = self.data[i];
+                            self.data[new_loc + 3] = self.data[i + 1];
+                            self.data[new_loc + 4] = self.data[i];
+                            self.data[new_loc + 5] = self.data[i + 1];
+                        }
+
+                        self.image_type = ImageType::RGB16;
+                    },
+                    ImageType::RGBA16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len * 3);
+                        for _ in 0..(original_len * 3) {
+                            self.data.push(255);
+                        }
+
+                        for i in (0..original_len).step_by(2).rev() {
+                            let new_loc: usize = i * 4;
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i + 1];
+                            self.data[new_loc + 2] = self.data[i];
+                            self.data[new_loc + 3] = self.data[i + 1];
+                            self.data[new_loc + 4] = self.data[i];
+                            self.data[new_loc + 5] = self.data[i + 1];
+                        }
+
+                        for i in (6..original_len).step_by(8) {
+                            self.data[i] = 255;
+                            self.data[i + 1] = 255;
+                        }
+
+                        self.image_type = ImageType::RGBA16;
+                    },
                 }
             },
             ImageType::GRAYA16 => {
                 match image_type {
-                    ImageType::GRAY8 => {},
-                    ImageType::GRAYA8 => {},
-                    ImageType::GRAY16 => {},
-                    ImageType::GRAYA16 => {},
-                    ImageType::RGB8 => {},
-                    ImageType::RGBA8 => {},
-                    ImageType::RGB16 => {},
-                    ImageType::RGBA16 => {},
+                    ImageType::GRAY8 => {
+                        // bit shift to the right by 2 == divide by 4
+                        for i in (0..self.data.len()).step_by(4) {
+                            self.data[i >> 2] = Self::val_u16_to_u8(((self.data[i] as u16) << 8) | (self.data[i + 1] as u16));
+                        }
+
+                        self.data.truncate(self.data.len() >> 2);
+                        self.data.shrink_to_fit();
+
+                        self.image_type = ImageType::GRAY8;
+                    },
+                    ImageType::GRAYA8 => {
+                        for i in (0..self.data.len()).step_by(2) {
+                            self.data[i >> 1] = Self::val_u16_to_u8(((self.data[i] as u16) << 8) | (self.data[i + 1] as u16));
+                        }
+
+                        self.data.truncate(self.data.len() >> 1);
+                        self.data.shrink_to_fit();
+
+                        self.image_type = ImageType::GRAYA8;
+                    },
+                    ImageType::GRAY16 => {
+                        for i in (0..self.data.len()).step_by(4) {
+                            let new_loc: usize = i >> 1;
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i + 1];
+                        }
+
+                        self.data.truncate(self.data.len() >> 1);
+                        self.data.shrink_to_fit();
+
+                        self.image_type = ImageType::GRAY16;
+                    },
+                    ImageType::GRAYA16 => {},  // do nothing (same type)
+                    ImageType::RGB8 => {
+                        for i in (0..self.data.len()).step_by(4) {
+                            let new_val: u8 = Self::val_u16_to_u8(((self.data[i] as u16) << 8) | (self.data[i + 1] as u16));
+                            let new_loc: usize = (i >> 1) + (i >> 2);
+                            self.data[new_loc] = new_val;
+                            self.data[new_loc + 1] = new_val;
+                            self.data[new_loc + 2] = new_val;
+                        }
+
+                        self.data.truncate((self.data.len() >> 1) + (self.data.len() >> 2));
+                        self.data.shrink_to_fit();
+
+                        self.image_type = ImageType::RGB8;
+                    },
+                    ImageType::RGBA8 => {
+                        for i in (0..self.data.len()).step_by(4) {
+                            let new_val: u8 = Self::val_u16_to_u8(((self.data[i] as u16) << 8) | (self.data[i + 1] as u16));
+                            let new_transparency: u8 = Self::val_u16_to_u8(((self.data[i + 2] as u16) << 8) | (self.data[i + 3] as u16));
+                            self.data[i] = new_val;
+                            self.data[i + 1] = new_val;
+                            self.data[i + 2] = new_val;
+                            self.data[i + 3] = new_transparency;
+                        }
+
+                        self.image_type = ImageType::RGBA8;
+                    },
+                    ImageType::RGB16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len >> 1);
+                        for _ in 0..(original_len >> 1) {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(4).rev() {
+                            let new_loc: usize = i + (i >> 1);
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i + 1];
+                            self.data[new_loc + 2] = self.data[i];
+                            self.data[new_loc + 3] = self.data[i + 1];
+                            self.data[new_loc + 4] = self.data[i];
+                            self.data[new_loc + 5] = self.data[i + 1];
+                        }
+
+                        self.image_type = ImageType::RGB16;
+                    },
+                    ImageType::RGBA16 => {
+                        let original_len = self.data.len();
+
+                        self.data.reserve_exact(original_len);
+                        for _ in 0..original_len {
+                            self.data.push(0);
+                        }
+
+                        for i in (0..original_len).step_by(4).rev() {
+                            let new_loc: usize = i * 2;
+                            self.data[new_loc] = self.data[i];
+                            self.data[new_loc + 1] = self.data[i + 1];
+                            self.data[new_loc + 2] = self.data[i];
+                            self.data[new_loc + 3] = self.data[i + 1];
+                            self.data[new_loc + 4] = self.data[i];
+                            self.data[new_loc + 5] = self.data[i + 1];
+                            self.data[new_loc + 6] = self.data[i + 2];
+                            self.data[new_loc + 7] = self.data[i + 3];
+                        }
+
+                        self.image_type = ImageType::RGBA16;
+                    },
                 }
             },
             ImageType::RGB8 => {
@@ -2156,17 +2532,7 @@ impl Indexing for Image {
 
     #[inline]
     fn index_unchecked(&self, index: (usize, usize)) -> usize {
-        let pix_ind: usize = (self.height - index.1 - 1) * self.width + index.0;
-        match self.image_type {
-            ImageType::GRAY8 => pix_ind,
-            ImageType::GRAYA8 => pix_ind * 2,
-            ImageType::GRAY16 => pix_ind * 2,
-            ImageType::GRAYA16 => pix_ind * 4,
-            ImageType::RGB8 => pix_ind * 3,
-            ImageType::RGBA8 => pix_ind * 4,
-            ImageType::RGB16 => pix_ind * 6,
-            ImageType::RGBA16 => pix_ind * 8,
-        }
+        ((self.height - index.1 - 1) * self.width + index.0) * self.image_type.bytes_per_pixel()
     }
 
     #[inline]

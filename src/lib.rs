@@ -30,8 +30,11 @@
 //! Coordinates origin is at the bottom left corner of the image.
 
 pub mod image;
+
 #[doc(inline)]
 pub use image::{
+    Conversions,
+    Colors,
     Image,
     ImageType,
     IndexingError,
