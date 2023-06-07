@@ -4430,6 +4430,190 @@ mod tests {
     }
 
     #[test]
+    fn conversions_graya16_to_gray8() {
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        let image2 = Image::new(100, 100, Colors::GRAY8(120));
+
+        image.convert(ImageType::GRAY8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAY8);
+
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
+        image2.set((0, 0), Colors::GRAY8(140)).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::GRAY8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAY8);
+    }
+
+    #[test]
+    fn conversions_graya16_to_graya8() {
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
+
+        image.convert(ImageType::GRAYA8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAYA8);
+
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
+        image2.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::GRAYA8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAYA8);
+    }
+
+    #[test]
+    fn conversions_graya16_to_gray16() {
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
+
+        image.convert(ImageType::GRAY16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAY16);
+
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
+        image2.set((0, 0), Colors::GRAY16(35_980)).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::GRAY16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAY16);
+    }
+
+    #[test]
+    fn conversions_graya16_to_graya16() {
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+
+        image.convert(ImageType::GRAYA16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAYA16);
+
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image2.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::GRAYA16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAYA16);
+    }
+
+    #[test]
+    fn conversions_graya16_to_rgb8() {
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        let image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
+
+        image.convert(ImageType::RGB8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGB8);
+
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
+        image2.set((0, 0), Colors::RGB8([140, 140, 140])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::RGB8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGB8);
+    }
+
+    #[test]
+    fn conversions_graya16_to_rgba8() {
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        let image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
+
+        image.convert(ImageType::RGBA8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGBA8);
+
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
+        image2.set((0, 0), Colors::RGBA8([140, 140, 140, 255])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::RGBA8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGBA8);
+    }
+
+    #[test]
+    fn conversions_graya16_to_rgb16() {
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        let image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
+
+        image.convert(ImageType::RGB16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGB16);
+
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
+        image2.set((0, 0), Colors::RGB16([35_980, 35_980, 35_980])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::RGB16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGB16);
+    }
+
+    #[test]
+    fn conversions_graya16_to_rgba16() {
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        let image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
+
+        image.convert(ImageType::RGBA16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGBA16);
+
+        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
+        image2.set((0, 0), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::RGBA16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGBA16);
+    }
+
+    #[test]
     fn drawing_rectangle() {
         let mut image = Image::new(100, 100, Colors::RGB8([255, 255, 255]));
 
@@ -4457,58 +4641,6 @@ mod tests {
         let image2 = Image::from_bytes(100, 100, ImageType::GRAY8, &bytes).unwrap();
 
         assert_eq!(image, image2);
-    }
-
-    #[test]
-    fn utilities_fields() {
-        let image = Image::new(100, 100, Colors::GRAY8(255));
-
-        assert_eq!(image.data(), &vec![255; 100 * 100]);
-        assert_eq!(image.data(), &image.data);
-
-        assert_eq!(image.width(), 100);
-        assert_eq!(image.width(), image.width);
-
-        assert_eq!(image.height(), 100);
-        assert_eq!(image.height(), image.height);
-
-        assert_eq!(image.image_type(), ImageType::GRAY8);
-        assert_eq!(image.image_type(), image.image_type);
-    }
-
-    #[test]
-    fn utilities_background() {
-        let mut image = Image::new(100, 100, Colors::RGB8([100, 120, 140]));
-        let image_original = image.clone();
-
-        if image.fill_image(Colors::GRAY8(255)).is_ok() { panic!("Should fail!") }
-
-        image.fill_image(Colors::RGB8([0, 0, 0])).unwrap();
-        assert_ne!(image, image_original);
-
-        image.clear();
-        assert_eq!(image, image_original);
-
-        image.fill_image(Colors::RGB8([130, 150, 170])).unwrap();
-        image.save_background();
-        image.clear();
-        assert_ne!(image, image_original);
-        assert_eq!(image.background_data, BackgroundData::Color(Colors::RGB8([130, 150, 170])));
-
-        image.fill_image(Colors::RGB8([100, 120, 140])).unwrap();
-        image.save_background();
-        image.clear();
-        assert_eq!(image, image_original);
-        assert_eq!(image.background_data, BackgroundData::Color(Colors::RGB8([100, 120, 140])));
-
-        image.set((0, image.height - 1), Colors::RGB8([0, 0, 0])).unwrap();
-        image.save_background();
-        image.clear();
-        assert_ne!(image, image_original);
-
-        let mut vec_to_match: Vec<u8> = [100, 120, 140].repeat(image.width * image.height);
-        vec_to_match[..3].fill(0);
-        assert_eq!(image.background_data, BackgroundData::Image(vec_to_match));
     }
 
     #[test]
@@ -4597,5 +4729,57 @@ mod tests {
         remove_file("test_io_rgba16.png").unwrap();
 
         assert_eq!(image, image2);
+    }
+
+    #[test]
+    fn utilities_fields() {
+        let image = Image::new(100, 100, Colors::GRAY8(255));
+
+        assert_eq!(image.data(), &vec![255; 100 * 100]);
+        assert_eq!(image.data(), &image.data);
+
+        assert_eq!(image.width(), 100);
+        assert_eq!(image.width(), image.width);
+
+        assert_eq!(image.height(), 100);
+        assert_eq!(image.height(), image.height);
+
+        assert_eq!(image.image_type(), ImageType::GRAY8);
+        assert_eq!(image.image_type(), image.image_type);
+    }
+
+    #[test]
+    fn utilities_background() {
+        let mut image = Image::new(100, 100, Colors::RGB8([100, 120, 140]));
+        let image_original = image.clone();
+
+        if image.fill_image(Colors::GRAY8(255)).is_ok() { panic!("Should fail!") }
+
+        image.fill_image(Colors::RGB8([0, 0, 0])).unwrap();
+        assert_ne!(image, image_original);
+
+        image.clear();
+        assert_eq!(image, image_original);
+
+        image.fill_image(Colors::RGB8([130, 150, 170])).unwrap();
+        image.save_background();
+        image.clear();
+        assert_ne!(image, image_original);
+        assert_eq!(image.background_data, BackgroundData::Color(Colors::RGB8([130, 150, 170])));
+
+        image.fill_image(Colors::RGB8([100, 120, 140])).unwrap();
+        image.save_background();
+        image.clear();
+        assert_eq!(image, image_original);
+        assert_eq!(image.background_data, BackgroundData::Color(Colors::RGB8([100, 120, 140])));
+
+        image.set((0, image.height - 1), Colors::RGB8([0, 0, 0])).unwrap();
+        image.save_background();
+        image.clear();
+        assert_ne!(image, image_original);
+
+        let mut vec_to_match: Vec<u8> = [100, 120, 140].repeat(image.width * image.height);
+        vec_to_match[..3].fill(0);
+        assert_eq!(image.background_data, BackgroundData::Image(vec_to_match));
     }
 }
