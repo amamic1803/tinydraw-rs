@@ -451,6 +451,105 @@ pub trait Conversions {
         (value as f64 * 0.003_891_050_583_657_587_6_f64).round() as u8
     }
 
+    /// Checks if conversion to the specified color type is lossless.
+    /// # Arguments
+    /// * ```image_type1``` - The source color type.
+    /// * ```image_type2``` - The destination color type.
+    /// # Returns
+    /// * ```true``` if conversion is lossless, ```false``` otherwise.
+    /// # Example
+    /// ```
+    /// use tinydraw::{Image, ImageType, Conversions};
+    ///
+    /// let image_type1: ImageType = ImageType::GRAY8;
+    /// let image_type2: ImageType = ImageType::RGB8;
+    /// assert!(<Image as Conversions>::cvt_is_lossless(image_type1, image_type2));
+    ///
+    /// let image_type1: ImageType = ImageType::RGB8;
+    /// let image_type2: ImageType = ImageType::GRAY8;
+    /// assert!(!<Image as Conversions>::cvt_is_lossless(image_type1, image_type2));
+    /// ```
+    fn cvt_is_lossless(image_type1: ImageType, image_type2: ImageType) -> bool {
+        match image_type1 {
+            ImageType::GRAY8 => true,
+            ImageType::GRAYA8 => {
+                match image_type2 {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => true,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => true,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => true,
+                    ImageType::RGB16 => false,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::GRAY16 => {
+                match image_type2 {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => true,
+                    ImageType::GRAYA16 => true,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => false,
+                    ImageType::RGB16 => true,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::GRAYA16 => {
+                match image_type2 {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => true,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => false,
+                    ImageType::RGB16 => false,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::RGB8 => {
+                match image_type2 {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => false,
+                    ImageType::RGB8 => true,
+                    ImageType::RGBA8 => true,
+                    ImageType::RGB16 => true,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::RGBA8 => {
+                match image_type2 {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => false,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => true,
+                    ImageType::RGB16 => false,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::RGB16 => {
+                match image_type2 {
+                    ImageType::GRAY8 => false,
+                    ImageType::GRAYA8 => false,
+                    ImageType::GRAY16 => false,
+                    ImageType::GRAYA16 => false,
+                    ImageType::RGB8 => false,
+                    ImageType::RGBA8 => false,
+                    ImageType::RGB16 => true,
+                    ImageType::RGBA16 => true,
+                }
+            },
+            ImageType::RGBA16 => {
+                matches!(image_type2, ImageType::RGBA16)
+            },
+        }
+    }
+
     /// Converts the bytes from one color type to another.
     /// Not intended to be used directly.
     /// Use the ```convert``` method instead.
@@ -472,7 +571,7 @@ pub trait Conversions {
                         }
 
                         for i in (0..original_len).rev() {
-                            data[i * 2] = data[i];
+                            data[i << 1] = data[i];
                         }
                         for i in (1..original_len).step_by(2) {
                             data[i] = 255;
@@ -488,7 +587,7 @@ pub trait Conversions {
 
                         for i in (0..original_len).rev() {
                             let new_val: u16 = Self::val_u8_to_u16(data[i]);
-                            let new_loc: usize = i * 2;
+                            let new_loc: usize = i << 1;
                             data[new_loc] = (new_val >> 8) as u8;
                             data[new_loc + 1] = new_val as u8;
                         }
@@ -496,14 +595,15 @@ pub trait Conversions {
                     ImageType::GRAYA16 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 3);
-                        for _ in 0..(original_len * 3) {
+                        let reserve_amount = original_len * 3;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(255);
                         }
 
                         for i in (0..original_len).rev() {
                             let new_val: u16 = Self::val_u8_to_u16(data[i]);
-                            let new_loc: usize = i * 4;
+                            let new_loc: usize = i << 2;
                             data[new_loc] = (new_val >> 8) as u8;
                             data[new_loc + 1] = new_val as u8;
                         }
@@ -516,8 +616,9 @@ pub trait Conversions {
                     ImageType::RGB8 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 2);
-                        for _ in 0..(original_len * 2) {
+                        let reserve_amount = original_len * 2;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(0);
                         }
 
@@ -531,13 +632,14 @@ pub trait Conversions {
                     ImageType::RGBA8 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 3);
-                        for _ in 0..(original_len * 3) {
+                        let reserve_amount = original_len * 3;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(255);
                         }
 
                         for i in (0..original_len).rev() {
-                            let new_loc: usize = i * 4;
+                            let new_loc: usize = i << 2;
                             data[new_loc] = data[i];
                             data[new_loc + 1] = data[i];
                             data[new_loc + 2] = data[i];
@@ -550,8 +652,9 @@ pub trait Conversions {
                     ImageType::RGB16 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 5);
-                        for _ in 0..(original_len * 5) {
+                        let reserve_amount = original_len * 5;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(0);
                         }
 
@@ -569,14 +672,15 @@ pub trait Conversions {
                     ImageType::RGBA16 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 7);
-                        for _ in 0..(original_len * 7) {
+                        let reserve_amount = original_len * 7;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(255);
                         }
 
                         for i in (0..original_len).rev() {
                             let new_val: u16 = Self::val_u8_to_u16(data[i]);
-                            let new_loc: usize = i * 8;
+                            let new_loc: usize = i << 3;
                             data[new_loc] = (new_val >> 8) as u8;
                             data[new_loc + 1] = new_val as u8;
                             data[new_loc + 2] = (new_val >> 8) as u8;
@@ -623,7 +727,7 @@ pub trait Conversions {
                         for i in (0..original_len).step_by(2).rev() {
                             let new_val: u16 = Self::val_u8_to_u16(data[i]);
                             let new_transparency: u16 = Self::val_u8_to_u16(data[i + 1]);
-                            let new_loc: usize = i * 2;
+                            let new_loc: usize = i << 1;
                             data[new_loc] = (new_val >> 8) as u8;
                             data[new_loc + 1] = new_val as u8;
                             data[new_loc + 2] = (new_transparency >> 8) as u8;
@@ -633,8 +737,9 @@ pub trait Conversions {
                     ImageType::RGB8 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len >> 1);
-                        for _ in 0..(original_len >> 1) {
+                        let reserve_amount = original_len >> 1;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(0);
                         }
 
@@ -654,7 +759,7 @@ pub trait Conversions {
                         }
 
                         for i in (0..original_len).step_by(2).rev() {
-                            let new_loc: usize = i * 2;
+                            let new_loc: usize = i << 1;
                             data[new_loc + 3] = data[i + 1];
 
                             data[new_loc] = data[i];
@@ -665,8 +770,9 @@ pub trait Conversions {
                     ImageType::RGB16 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 2);
-                        for _ in 0..(original_len * 2) {
+                        let reserve_amount = original_len << 1;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(0);
                         }
 
@@ -684,15 +790,16 @@ pub trait Conversions {
                     ImageType::RGBA16 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 3);
-                        for _ in 0..(original_len * 3) {
+                        let reserve_amount = original_len * 3;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(0);
                         }
 
                         for i in (0..original_len).step_by(2).rev() {
                             let new_val: u16 = Self::val_u8_to_u16(data[i]);
                             let new_transparency: u16 = Self::val_u8_to_u16(data[i + 1]);
-                            let new_loc: usize = i * 4;
+                            let new_loc: usize = i << 2;
                             data[new_loc] = (new_val >> 8) as u8;
                             data[new_loc + 1] = new_val as u8;
                             data[new_loc + 2] = (new_val >> 8) as u8;
@@ -731,7 +838,7 @@ pub trait Conversions {
                         }
 
                         for i in (0..original_len).step_by(2).rev() {
-                            let new_loc: usize = i * 2;
+                            let new_loc: usize = i << 1;
                             data[new_loc] = data[i];
                             data[new_loc + 1] = data[i + 1];
                         }
@@ -744,8 +851,9 @@ pub trait Conversions {
                     ImageType::RGB8 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len >> 1);
-                        for _ in 0..(original_len >> 1) {
+                        let reserve_amount = original_len >> 1;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(0);
                         }
 
@@ -767,7 +875,7 @@ pub trait Conversions {
 
                         for i in (0..original_len).step_by(2).rev() {
                             let new_val: u8 = Self::val_u16_to_u8(((data[i] as u16) << 8) | (data[i + 1] as u16));
-                            let new_loc: usize = i * 2;
+                            let new_loc: usize = i << 1;
                             data[new_loc] = new_val;
                             data[new_loc + 1] = new_val;
                             data[new_loc + 2] = new_val;
@@ -780,8 +888,9 @@ pub trait Conversions {
                     ImageType::RGB16 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 2);
-                        for _ in 0..(original_len * 2) {
+                        let reserve_amount = original_len << 1;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(0);
                         }
 
@@ -798,13 +907,14 @@ pub trait Conversions {
                     ImageType::RGBA16 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len * 3);
-                        for _ in 0..(original_len * 3) {
+                        let reserve_amount = original_len * 3;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(255);
                         }
 
                         for i in (0..original_len).step_by(2).rev() {
-                            let new_loc: usize = i * 4;
+                            let new_loc: usize = i << 2;
                             data[new_loc] = data[i];
                             data[new_loc + 1] = data[i + 1];
                             data[new_loc + 2] = data[i];
@@ -875,8 +985,9 @@ pub trait Conversions {
                     ImageType::RGB16 => {
                         let original_len = data.len();
 
-                        data.reserve_exact(original_len >> 1);
-                        for _ in 0..(original_len >> 1) {
+                        let reserve_amount = original_len >> 1;
+                        data.reserve_exact(reserve_amount);
+                        for _ in 0..(reserve_amount) {
                             data.push(0);
                         }
 
@@ -899,7 +1010,7 @@ pub trait Conversions {
                         }
 
                         for i in (0..original_len).step_by(4).rev() {
-                            let new_loc: usize = i * 2;
+                            let new_loc: usize = i << 1;
                             data[new_loc + 6] = data[i + 2];
                             data[new_loc + 7] = data[i + 3];
 
@@ -1272,13 +1383,117 @@ pub trait Conversions {
             },
             ImageType::RGBA16 => {
                 match img_type_new {
-                    ImageType::GRAY8 => {},
-                    ImageType::GRAYA8 => {},
-                    ImageType::GRAY16 => {},
-                    ImageType::GRAYA16 => {},
-                    ImageType::RGB8 => {},
-                    ImageType::RGBA8 => {},
-                    ImageType::RGB16 => {},
+                    ImageType::GRAY8 => {
+                        for i in (0..data.len()).step_by(8) {
+                            data[i >> 3] = Self::val_u16_to_u8(Self::average_u16(&[
+                                (data[i] as u16) << 8 | data[i + 1] as u16,
+                                (data[i + 2] as u16) << 8 | data[i + 3] as u16,
+                                (data[i + 4] as u16) << 8 | data[i + 5] as u16,
+                            ]));
+                        }
+
+                        data.truncate(data.len() >> 3);
+                        data.shrink_to_fit();
+                    },
+                    ImageType::GRAYA8 => {
+                        for i in (0..data.len()).step_by(8) {
+                            let new_loc = i >> 2;  // divide by 4
+                            data[new_loc] = Self::val_u16_to_u8(Self::average_u16(&[
+                                (data[i] as u16) << 8 | data[i + 1] as u16,
+                                (data[i + 2] as u16) << 8 | data[i + 3] as u16,
+                                (data[i + 4] as u16) << 8 | data[i + 5] as u16,
+                            ]));
+                            data[new_loc + 1] = Self::val_u16_to_u8(
+                                (data[i + 6] as u16) << 8 | data[i + 7] as u16
+                            );
+                        }
+
+                        data.truncate(data.len() >> 2);
+                        data.shrink_to_fit();
+                    },
+                    ImageType::GRAY16 => {
+                        for i in (0..data.len()).step_by(8) {
+                            let new_loc = i >> 2;  // divide by 4
+                            let new_val = Self::average_u16(&[
+                                (data[i] as u16) << 8 | data[i + 1] as u16,
+                                (data[i + 2] as u16) << 8 | data[i + 3] as u16,
+                                (data[i + 4] as u16) << 8 | data[i + 5] as u16,
+                            ]);
+                            data[new_loc] = (new_val >> 8) as u8;
+                            data[new_loc + 1] = new_val as u8;
+                        }
+
+                        data.truncate(data.len() >> 2);
+                        data.shrink_to_fit();
+                    },
+                    ImageType::GRAYA16 => {
+                        for i in (0..data.len()).step_by(8) {
+                            let new_loc = i >> 1;  // divide by 2
+                            let new_val = Self::average_u16(&[
+                                (data[i] as u16) << 8 | data[i + 1] as u16,
+                                (data[i + 2] as u16) << 8 | data[i + 3] as u16,
+                                (data[i + 4] as u16) << 8 | data[i + 5] as u16,
+                            ]);
+                            data[new_loc] = (new_val >> 8) as u8;
+                            data[new_loc + 1] = new_val as u8;
+                            data[new_loc + 2] = data[i + 6];
+                            data[new_loc + 3] = data[i + 7];
+                        }
+
+                        data.truncate(data.len() >> 1);
+                        data.shrink_to_fit();
+                    },
+                    ImageType::RGB8 => {
+                        for i in (0..data.len()).step_by(8) {
+                            let new_loc = (i >> 3) + (i >> 2);  // multiply by 3/8
+                            data[new_loc] = Self::val_u16_to_u8(
+                                (data[i] as u16) << 8 | data[i + 1] as u16
+                            );
+                            data[new_loc + 1] = Self::val_u16_to_u8(
+                                (data[i + 2] as u16) << 8 | data[i + 3] as u16
+                            );
+                            data[new_loc + 2] = Self::val_u16_to_u8(
+                                (data[i + 4] as u16) << 8 | data[i + 5] as u16
+                            );
+                        }
+
+                        data.truncate((data.len() >> 3) + (data.len() >> 2));
+                        data.shrink_to_fit();
+                    },
+                    ImageType::RGBA8 => {
+                        for i in (0..data.len()).step_by(8) {
+                            let new_loc = i >> 1;  // divide by 2
+                            data[new_loc] = Self::val_u16_to_u8(
+                                (data[i] as u16) << 8 | data[i + 1] as u16
+                            );
+                            data[new_loc + 1] = Self::val_u16_to_u8(
+                                (data[i + 2] as u16) << 8 | data[i + 3] as u16
+                            );
+                            data[new_loc + 2] = Self::val_u16_to_u8(
+                                (data[i + 4] as u16) << 8 | data[i + 5] as u16
+                            );
+                            data[new_loc + 3] = Self::val_u16_to_u8(
+                                (data[i + 6] as u16) << 8 | data[i + 7] as u16
+                            );
+                        }
+
+                        data.truncate(data.len() >> 1);
+                        data.shrink_to_fit();
+                    },
+                    ImageType::RGB16 => {
+                        for i in (0..data.len()).step_by(8) {
+                            let new_loc = (i >> 1) + (i >> 2);  // multiply by 3/4
+                            data[new_loc] = data[i];
+                            data[new_loc + 1] = data[i + 1];
+                            data[new_loc + 2] = data[i + 2];
+                            data[new_loc + 3] = data[i + 3];
+                            data[new_loc + 4] = data[i + 4];
+                            data[new_loc + 5] = data[i + 5];
+                        }
+
+                        data.truncate((data.len() >> 1) + (data.len() >> 2));
+                        data.shrink_to_fit();
+                    },
                     ImageType::RGBA16 => {},  // do nothing (same type)
                 }
             },
@@ -1289,13 +1504,6 @@ pub trait Conversions {
     /// # Arguments
     /// * ```image_type``` - The color type to which the image will be converted.
     fn convert(&mut self, image_type: ImageType);
-
-    /// Checks if conversion to the specified color type is lossless.
-    /// # Arguments
-    /// * ```image_type``` - The color type to which the image will be converted.
-    /// # Returns
-    /// * ```true``` - If the conversion is lossless.
-    fn cvt_is_lossless(&self, image_type: ImageType) -> bool;
 }
 
 /// A trait for drawing on images.
@@ -2745,91 +2953,6 @@ impl Conversions for Image {
 
             // change image type
             self.image_type = image_type;
-        }
-    }
-
-    fn cvt_is_lossless(&self, image_type: ImageType) -> bool {
-        if match self.image_type {
-            ImageType::GRAY8 => true,
-            ImageType::GRAYA8 => {
-                match image_type {
-                    ImageType::GRAY8 => false,
-                    ImageType::GRAYA8 => true,
-                    ImageType::GRAY16 => false,
-                    ImageType::GRAYA16 => true,
-                    ImageType::RGB8 => false,
-                    ImageType::RGBA8 => true,
-                    ImageType::RGB16 => false,
-                    ImageType::RGBA16 => true,
-                }
-            },
-            ImageType::GRAY16 => {
-                match image_type {
-                    ImageType::GRAY8 => false,
-                    ImageType::GRAYA8 => false,
-                    ImageType::GRAY16 => true,
-                    ImageType::GRAYA16 => true,
-                    ImageType::RGB8 => false,
-                    ImageType::RGBA8 => false,
-                    ImageType::RGB16 => true,
-                    ImageType::RGBA16 => true,
-                }
-            },
-            ImageType::GRAYA16 => {
-                match image_type {
-                    ImageType::GRAY8 => false,
-                    ImageType::GRAYA8 => false,
-                    ImageType::GRAY16 => false,
-                    ImageType::GRAYA16 => true,
-                    ImageType::RGB8 => false,
-                    ImageType::RGBA8 => false,
-                    ImageType::RGB16 => false,
-                    ImageType::RGBA16 => true,
-                }
-            },
-            ImageType::RGB8 => {
-                match image_type {
-                    ImageType::GRAY8 => false,
-                    ImageType::GRAYA8 => false,
-                    ImageType::GRAY16 => false,
-                    ImageType::GRAYA16 => false,
-                    ImageType::RGB8 => true,
-                    ImageType::RGBA8 => true,
-                    ImageType::RGB16 => true,
-                    ImageType::RGBA16 => true,
-                }
-            },
-            ImageType::RGBA8 => {
-                match image_type {
-                    ImageType::GRAY8 => false,
-                    ImageType::GRAYA8 => false,
-                    ImageType::GRAY16 => false,
-                    ImageType::GRAYA16 => false,
-                    ImageType::RGB8 => false,
-                    ImageType::RGBA8 => true,
-                    ImageType::RGB16 => false,
-                    ImageType::RGBA16 => true,
-                }
-            },
-            ImageType::RGB16 => {
-                match image_type {
-                    ImageType::GRAY8 => false,
-                    ImageType::GRAYA8 => false,
-                    ImageType::GRAY16 => false,
-                    ImageType::GRAYA16 => false,
-                    ImageType::RGB8 => false,
-                    ImageType::RGBA8 => false,
-                    ImageType::RGB16 => true,
-                    ImageType::RGBA16 => true,
-                }
-            },
-            ImageType::RGBA16 => {
-                matches!(image_type, ImageType::RGBA16)
-            },
-        } {
-            true
-        } else {
-            todo!()
         }
     }
 }
@@ -5474,6 +5597,190 @@ mod tests {
 
         let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
         image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image2.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::RGBA16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGBA16);
+    }
+
+    #[test]
+    fn conversions_rgba16_to_gray8() {
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        let image2 = Image::new(100, 100, Colors::GRAY8(120));
+
+        image.convert(ImageType::GRAY8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAY8);
+
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
+        image2.set((0, 0), Colors::GRAY8(150)).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::GRAY8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAY8);
+    }
+
+    #[test]
+    fn conversions_rgba16_to_graya8() {
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
+
+        image.convert(ImageType::GRAYA8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAYA8);
+
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
+        image2.set((0, 0), Colors::GRAYA8([150, 255])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::GRAYA8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAYA8);
+    }
+
+    #[test]
+    fn conversions_rgba16_to_gray16() {
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
+
+        image.convert(ImageType::GRAY16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAY16);
+
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
+        image2.set((0, 0), Colors::GRAY16(38_550)).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::GRAY16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAY16);
+    }
+
+    #[test]
+    fn conversions_rgba16_to_graya16() {
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+
+        image.convert(ImageType::GRAYA16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAYA16);
+
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
+        image2.set((0, 0), Colors::GRAYA16([38_550, 65_535])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::GRAYA16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::GRAYA16);
+    }
+
+    #[test]
+    fn conversions_rgba16_to_rgb8() {
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        let image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
+
+        image.convert(ImageType::RGB8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGB8);
+
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
+        image2.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::RGB8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGB8);
+    }
+
+    #[test]
+    fn conversions_rgba16_to_rgba8() {
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        let image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 255]));
+
+        image.convert(ImageType::RGBA8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGBA8);
+
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 255]));
+        image2.set((0, 0), Colors::RGBA8([140, 150, 160, 255])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::RGBA8);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGBA8);
+    }
+
+    #[test]
+    fn conversions_rgba16_to_rgb16() {
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        let image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
+
+        image.convert(ImageType::RGB16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGB16);
+
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
+        image.save_background();
+        let mut image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
+        image2.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
+        image2.save_background();
+
+        image.convert(ImageType::RGB16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGB16);
+    }
+
+    #[test]
+    fn conversions_rgba16_to_rgba16() {
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        let image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+
+        image.convert(ImageType::RGBA16);
+
+        assert_eq!(image, image2);
+        assert_eq!(image.image_type, ImageType::RGBA16);
+
+        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
+        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
         image.save_background();
         let mut image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
         image2.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();

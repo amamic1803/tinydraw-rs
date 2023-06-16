@@ -28,7 +28,7 @@ jobs:
     - name: Test
       run: cargo test --verbose --all-features
 
-    - name: Generate docs
+    - name: Docs
       run: cargo doc --verbose --all-features
 
 
@@ -49,7 +49,7 @@ jobs:
     - name: Test
       run: cargo test --verbose --all-features
 
-    - name: Generate docs
+    - name: Docs
       run: cargo doc --verbose --all-features
 
 
@@ -70,5 +70,5 @@ jobs:
       - name: Test
         run: cargo test --verbose --all-features
 
-      - name: Generate docs
+      - name: Docs
         run: cargo doc --verbose --all-features
