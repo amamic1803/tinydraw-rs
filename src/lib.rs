@@ -35,9 +35,13 @@ pub mod image;
 pub use image::{
     Conversions,
     Colors,
+    Drawing,
+    DrawingError,
     Image,
     ImageType,
+    Indexing,
     IndexingError,
-    IOError,
     IO,
+    IOError,
+    Utilities,
 };
