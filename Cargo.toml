@@ -1,19 +1,18 @@
 [package]
 name = "tinydraw"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Antonio Mamić <antoniomamic007@gmail.com>"]
 edition = "2021"
 description = "A small library for 2D drawing in Rust"
 readme = "README.md"
-repository = "https://github.com/DarkLord76865/tinydraw-rs"
+repository = "https://github.com/amamic1803/tinydraw-rs"
 license = "MIT"
-keywords = ["2d", "drawing", "graphics", "rendering", "images"]
+keywords = ["drawing", "graphics", "rendering", "images"]
 categories = ["graphics", "rendering"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-image_io = { version = "0.24.6", package="image", optional = true }
+image_io = { version = "0.24.7", package="image", optional = true }
 
 [features]
 file_io = ["dep:image_io"]

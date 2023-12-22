@@ -1,21 +1,23 @@
 //! A module that contains the [Image] struct and related functions.
 
 
+
+
+
 // standard library imports
 use std::{
     cmp::{min, max},
-    error::Error,
+    error,
     f64::consts::FRAC_1_SQRT_2,
     fmt::Display,
     ops::{Bound, RangeBounds},
-    ptr::slice_from_raw_parts,
+    slice,
 };
 
 // standard library imports when file_io feature is enabled
 #[cfg(feature = "file_io")]
 use std::{
     fs::remove_file,
-    io::ErrorKind,
     path::Path,
 };
 
@@ -25,9 +27,42 @@ use image_io::{
     ColorType,
     DynamicImage,
     save_buffer,
-    error::ImageError,
     io::Reader as ImageReader,
 };
+
+
+
+
+
+/// An enum that represents errors that can occur while using this library
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum Error {
+    /// The file already exists
+    FileExists,
+    /// The invalid opacity value
+    InvalidOpacity,
+    /// The invalid size of the image
+    InvalidSize,
+    /// The invalid type
+    InvalidType,
+    /// The index is out of bounds
+    OutOfBounds,
+    /// The given color is wrong
+    WrongColor,
+}
+impl error::Error for Error {}
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::FileExists => write!(f, "Error: File already exists!"),
+            Error::InvalidOpacity => write!(f, "Error: Invalid opacity value!"),
+            Error::InvalidSize => write!(f, "Error: The size of the image is invalid!"),
+            Error::InvalidType => write!(f, "Error: The unsupported type!"),
+            Error::OutOfBounds => write!(f, "Error: Index out of bounds!"),
+            Error::WrongColor => write!(f, "Error: Wrong color!"),
+        }
+    }
+}
 
 
 
@@ -47,20 +82,9 @@ pub struct Image {
     /// The background of the image
     background_data: BackgroundData
 }
-
 impl Display for Image {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let img_size = match self.image_type {
-            ImageType::GRAY8 => self.data.len(),
-            ImageType::GRAYA8 => self.data.len(),
-            ImageType::GRAY16 => self.data.len() * 2,
-            ImageType::GRAYA16 => self.data.len() * 2,
-            ImageType::RGB8 => self.data.len(),
-            ImageType::RGBA8 => self.data.len(),
-            ImageType::RGB16 => self.data.len() * 2,
-            ImageType::RGBA16 => self.data.len() * 2,
-        };
-        write!(f, "Image:\n   - dimensions: {}x{}\n   - type: {}   - size: {} bytes", self.width, self.height, self.image_type, img_size)
+        write!(f, "Image:\n   - dimensions: {}x{}\n   - type: {}   - size: {} bytes", self.width, self.height, self.image_type, self.data.len())
     }
 }
 
@@ -77,7 +101,7 @@ enum BackgroundData {
     Image(Vec<u8>)
 }
 
-/// An enum that holds the
+/// An enum that holds the color information
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Colors {
     /// The 8-bit grayscale color
@@ -119,67 +143,19 @@ pub enum ImageType {
     RGBA16,
 }
 
-/// An enum that holds the error information for [Drawing] trait
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum DrawingError {
-    /// The given color is wrong
-    WrongColor,
-    /// The invalid opacity value
-    InvalidOpacity,
-}
-
-/// An enum that holds the error information for [Indexing] trait
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum IndexingError {
-    /// The invalid opacity value
-    InvalidOpacity,
-    /// The index is out of bounds
-    OutOfBounds,
-    /// The given color is wrong
-    WrongColor,
-}
-
-/// An enum that holds the error information for [IO] trait
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum IOError {
-    /// Error while decoding the image
-    Decoding,
-    /// Error while encoding the image
-    Encoding,
-    /// The file already exists
-    FileExists,
-    /// The file was not found
-    FileNotFound,
-    /// The file is not an image
-    InvalidData,
-    /// The size of the image is invalid
-    InvalidSize,
-    /// The unsupported type
-    InvalidType,
-    /// The file could not be opened because of permissions
-    NoPermission,
-    /// The unknown error
-    Unknown,
-    /// The file can't be written
-    WriteError,
-}
-
-
 impl Colors {
-
-    #[inline]
-    fn bytes_per_pixel(&self) -> usize {
-        //! Returns the number of bytes per pixel
+    fn as_slice(&self) -> &[u8] {
+        //! Returns the bytes of the color
 
         match self {
-            Colors::GRAY8(_) => 1,
-            Colors::GRAYA8(_) => 2,
-            Colors::GRAY16(_) => 2,
-            Colors::GRAYA16(_) => 4,
-            Colors::RGB8(_) => 3,
-            Colors::RGBA8(_) => 4,
-            Colors::RGB16(_) => 6,
-            Colors::RGBA16(_) => 8,
+            Colors::GRAY8(color) => slice::from_ref(color),
+            Colors::GRAYA8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 2)},
+            Colors::GRAY16(color) => unsafe {slice::from_raw_parts(color as *const u16 as *const u8, 2)},
+            Colors::GRAYA16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 4)},
+            Colors::RGB8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 3)},
+            Colors::RGBA8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 4)},
+            Colors::RGB16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 6)},
+            Colors::RGBA16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 8)},
         }
     }
 }
@@ -217,7 +193,6 @@ impl Display for Colors {
         }
     }
 }
-
 impl Display for ImageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -233,48 +208,6 @@ impl Display for ImageType {
     }
 }
 
-impl Display for DrawingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DrawingError::WrongColor => write!(f, "DrawingError: Wrong color!"),
-            DrawingError::InvalidOpacity => write!(f, "DrawingError: Invalid opacity value!"),
-        }
-    }
-}
-
-impl Display for IndexingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IndexingError::InvalidOpacity => write!(f, "IndexingError: Invalid opacity value!"),
-            IndexingError::OutOfBounds => write!(f, "IndexingError: Index out of bounds!"),
-            IndexingError::WrongColor => write!(f, "IndexingError: Wrong color!"),
-        }
-    }
-}
-
-impl Display for IOError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IOError::Decoding => write!(f, "IOError: Error while decoding the image!"),
-            IOError::Encoding => write!(f, "IOError: Error while encoding the image!"),
-            IOError::FileExists => write!(f, "IOError: File already exists!"),
-            IOError::FileNotFound => write!(f, "IOError: File not found!"),
-            IOError::InvalidData => write!(f, "IOError: Invalid data!"),
-            IOError::InvalidSize => write!(f, "IOError: The size of the image is invalid!"),
-            IOError::InvalidType => write!(f, "IOError: The unsupported type!"),
-            IOError::NoPermission => write!(f, "IOError: Can't be completed because of denied permission."),
-            IOError::Unknown => write!(f, "IOError: Unknown error!"),
-            IOError::WriteError => write!(f, "IOError: Can't write to file!"),
-        }
-    }
-}
-
-impl Error for DrawingError {}
-
-impl Error for IndexingError {}
-
-impl Error for IOError {}
-
 impl From<Colors> for ImageType {
     fn from(color: Colors) -> Self {
         match color {
@@ -286,49 +219,6 @@ impl From<Colors> for ImageType {
             Colors::RGBA8(_) => ImageType::RGBA8,
             Colors::RGB16(_) => ImageType::RGB16,
             Colors::RGBA16(_) => ImageType::RGBA16,
-        }
-    }
-}
-
-#[cfg(feature = "file_io")]
-impl From<ErrorKind> for IOError {
-    fn from(error: ErrorKind) -> Self {
-        match error {
-            ErrorKind::NotFound => IOError::FileNotFound,
-            ErrorKind::PermissionDenied => IOError::NoPermission,
-            ErrorKind::ConnectionRefused => IOError::Unknown,
-            ErrorKind::ConnectionReset => IOError::Unknown,
-            ErrorKind::ConnectionAborted => IOError::Unknown,
-            ErrorKind::NotConnected => IOError::Unknown,
-            ErrorKind::AddrInUse => IOError::Unknown,
-            ErrorKind::AddrNotAvailable => IOError::Unknown,
-            ErrorKind::BrokenPipe => IOError::Unknown,
-            ErrorKind::AlreadyExists => IOError::FileExists,
-            ErrorKind::WouldBlock => IOError::Unknown,
-            ErrorKind::InvalidInput => IOError::Unknown,
-            ErrorKind::InvalidData => IOError::InvalidData,
-            ErrorKind::TimedOut => IOError::Unknown,
-            ErrorKind::WriteZero => IOError::WriteError,
-            ErrorKind::Interrupted => IOError::Unknown,
-            ErrorKind::Unsupported => IOError::Unknown,
-            ErrorKind::UnexpectedEof => IOError::Unknown,
-            ErrorKind::OutOfMemory => IOError::Unknown,
-            ErrorKind::Other => IOError::Unknown,
-            _ => IOError::Unknown,
-        }
-    }
-}
-
-#[cfg(feature = "file_io")]
-impl From<ImageError> for IOError {
-    fn from(error: ImageError) -> Self {
-        match error {
-            ImageError::Decoding(_) => IOError::Decoding,
-            ImageError::Encoding(_) => IOError::Encoding,
-            ImageError::Parameter(_) => IOError::Unknown,
-            ImageError::Limits(_) => IOError::Unknown,
-            ImageError::Unsupported(_) => IOError::Unknown,
-            ImageError::IoError(err) => IOError::from(err.kind()),
         }
     }
 }
@@ -1516,7 +1406,7 @@ pub trait Drawing {
     /// * ```color``` - The color of the circle.
     /// * ```thickness``` - The thickness of the circle. If the thickness is 0, the circle will be filled.
     /// * ```opacity``` - The opacity of the circle.
-    fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError>;
+    fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Colors, thickness: usize, opacity: f64) -> Result<(), Error>;
 
     /// Draws an ellipse on the image. If the ellipse is not fully contained in the image, it will be clipped.
     /// # Arguments
@@ -1525,7 +1415,7 @@ pub trait Drawing {
     /// * ```color``` - The color of the ellipse.
     /// * ```thickness``` - The thickness of the ellipse. If the thickness is 0, the ellipse will be filled.
     /// * ```opacity``` - The opacity of the ellipse.
-    fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError>;
+    fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), Error>;
 
     /// Draws a line on the image. If the line is not fully contained in the image, it will be clipped.
     /// # Arguments
@@ -1534,7 +1424,7 @@ pub trait Drawing {
     /// * ```color``` - The color of the line.
     /// * ```thickness``` - The thickness of the line.
     /// * ```opacity``` - The opacity of the line.
-    fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError>;
+    fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), Error>;
 
     /// Draws a rectangle on the image. If the rectangle is not fully contained in the image, it will be clipped.
     /// # Arguments
@@ -1543,7 +1433,7 @@ pub trait Drawing {
     /// * ```color``` - The color of the rectangle.
     /// * ```thickness``` - The thickness of the rectangle. If the thickness is 0, the rectangle will be filled.
     /// * ```opacity``` - The opacity of the rectangle.
-    fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError>;
+    fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), Error>;
 }
 
 /// A trait for indexing into image data
@@ -1554,7 +1444,7 @@ pub trait Indexing {
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// # Returns
     /// * [Result] which holds the index of the first byte of the pixel or [Err] with [IndexingError].
-    fn index(&self, index: (usize, usize)) -> Result<usize, IndexingError>;
+    fn index(&self, index: (usize, usize)) -> Result<usize, Error>;
 
     /// Returns the index of the first byte of the pixel at the given coordinates without performing checks.
     /// # Arguments
@@ -1568,7 +1458,7 @@ pub trait Indexing {
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// # Returns
     /// * [Result] which holds the value of the pixel or [Err] with [IndexingError].
-    fn get(&self, index: (usize, usize)) -> Result<Colors, IndexingError>;
+    fn get(&self, index: (usize, usize)) -> Result<Colors, Error>;
 
     /// Returns the value of the pixel at the given coordinates without performing checks.
     /// # Arguments
@@ -1583,7 +1473,7 @@ pub trait Indexing {
     /// * ```value``` - The value to set.
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [IndexingError].
-    fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), IndexingError>;
+    fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), Error>;
 
     /// Sets the value of the pixel at the given coordinates without performing checks.
     /// # Arguments
@@ -1598,7 +1488,7 @@ pub trait Indexing {
     /// * ```opacity``` - The opacity of the new value.
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [IndexingError].
-    fn set_transparent(&mut self, index: (usize, usize), color: Colors, opacity: f64) -> Result<(), IndexingError>;
+    fn set_transparent(&mut self, index: (usize, usize), color: Colors, opacity: f64) -> Result<(), Error>;
 
     /// Sets the value of the pixel by blending it with the current value at the given coordinates without performing checks.
     /// # Arguments
@@ -1613,7 +1503,7 @@ pub trait Indexing {
     /// * ```value``` - The value to fill with.
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [IndexingError].
-    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors) -> Result<(), IndexingError>;
+    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors) -> Result<(), Error>;
 
     /// Fills the given range in image with the given value without performing checks.
     /// # Arguments
@@ -1628,7 +1518,7 @@ pub trait Indexing {
     /// * ```opacity``` - The opacity of the new value.
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [IndexingError].
-    fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors, opacity: f64) -> Result<(), IndexingError>;
+    fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors, opacity: f64) -> Result<(), Error>;
 
     /// Fills the given range in image with the given value by blending it with the current value without performing checks.
     /// # Arguments
@@ -1649,7 +1539,7 @@ pub trait IO {
     /// * ```bytes``` - The bytes of the image.
     /// # Returns
     /// * [Result] which holds new [Image] or [Err] with [IOError].
-    fn from_bytes(width: usize, height: usize, image_type: ImageType, bytes: &[u8]) -> Result<Image, IOError>;
+    fn from_bytes(width: usize, height: usize, image_type: ImageType, bytes: &[u8]) -> Result<Image, Error>;
 
     /// Returns the bytes of the image as a vector.
     /// # Returns
@@ -1672,7 +1562,7 @@ pub trait IO {
     /// # Returns
     /// * [Result] which holds new [Image] or [Err] with [IOError].
     #[cfg(feature = "file_io")]
-    fn from_file(path: &str) -> Result<Image, IOError>;
+    fn from_file(path: &str) -> Result<Image, Box<dyn error::Error>>;
 
     /// Writes the image to the given file. Needs the ```file_io``` feature.
     /// # Arguments
@@ -1681,7 +1571,7 @@ pub trait IO {
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [IOError].
     #[cfg(feature = "file_io")]
-    fn to_file(&self, path: &str, overwrite: bool) -> Result<(), IOError>;
+    fn to_file(&self, path: &str, overwrite: bool) -> Result<(), Box<dyn error::Error>>;
 }
 
 /// A trait with useful functions for images.
@@ -1713,7 +1603,7 @@ pub trait Utilities {
     fn clear(&mut self);
 
     /// Fills the whole image with the given value.
-    fn fill_image(&mut self, color: Colors) -> Result<(), DrawingError>;
+    fn fill_image(&mut self, color: Colors) -> Result<(), Error>;
 
     /// Saves the current state of the image as background.
     fn save_background(&mut self);
@@ -2959,28 +2849,28 @@ impl Conversions for Image {
 
 impl Drawing for Image {
 
-    fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
+    fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Colors, thickness: usize, opacity: f64) -> Result<(), Error> {
         todo!()
     }
 
-    fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
+    fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), Error> {
         todo!()
     }
 
-    fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
+    fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), Error> {
         todo!()
     }
 
-    fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), DrawingError> {
+    fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Colors, thickness: usize, opacity: f64) -> Result<(), Error> {
 
         // check if color is valid for this image type
         if ImageType::from(color) != self.image_type {
-            return Err(DrawingError::WrongColor);
+            return Err(Error::WrongColor);
         }
 
         // if opacity is less than 0.0, bigger than 1.0, or NaN, return error
         if opacity.is_nan() || !(0.0..=1.0).contains(&opacity) {
-            return Err(DrawingError::InvalidOpacity);
+            return Err(Error::InvalidOpacity);
         }
 
         // if opacity is 0.0, nothing is to be drawn
@@ -3095,9 +2985,9 @@ impl Drawing for Image {
 impl Indexing for Image {
 
     #[inline]
-    fn index(&self, index: (usize, usize)) -> Result<usize, IndexingError> {
+    fn index(&self, index: (usize, usize)) -> Result<usize, Error> {
         if index.0 >= self.width || index.1 >= self.height {
-            Err(IndexingError::OutOfBounds)
+            Err(Error::OutOfBounds)
         } else {
             Ok(self.index_unchecked(index))
         }
@@ -3109,9 +2999,9 @@ impl Indexing for Image {
     }
 
     #[inline]
-    fn get(&self, index: (usize, usize)) -> Result<Colors, IndexingError> {
+    fn get(&self, index: (usize, usize)) -> Result<Colors, Error> {
         if index.0 >= self.width || index.1 >= self.height {
-            Err(IndexingError::OutOfBounds)
+            Err(Error::OutOfBounds)
         } else {
             Ok(self.get_unchecked(index))
         }
@@ -3161,11 +3051,11 @@ impl Indexing for Image {
     }
 
     #[inline]
-    fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), IndexingError> {
+    fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), Error> {
         if index.0 >= self.width || index.1 >= self.height {
-            Err(IndexingError::OutOfBounds)
+            Err(Error::OutOfBounds)
         } else if ImageType::from(color) != self.image_type {
-            Err(IndexingError::WrongColor)
+            Err(Error::WrongColor)
         } else {
             self.set_unchecked(index, color);
             Ok(())
@@ -3227,13 +3117,13 @@ impl Indexing for Image {
     }
 
     #[inline]
-    fn set_transparent(&mut self, index: (usize, usize), color: Colors, opacity: f64) -> Result<(), IndexingError> {
+    fn set_transparent(&mut self, index: (usize, usize), color: Colors, opacity: f64) -> Result<(), Error> {
         if index.0 >= self.width || index.1 >= self.height {
-            Err(IndexingError::OutOfBounds)
+            Err(Error::OutOfBounds)
         } else if ImageType::from(color) != self.image_type {
-            Err(IndexingError::WrongColor)
+            Err(Error::WrongColor)
         } else if opacity.is_nan() {
-            Err(IndexingError::InvalidOpacity)
+            Err(Error::InvalidOpacity)
         } else {
             let opacity_temp: f64 = if opacity > 1.0 {
                 1.0
@@ -3321,17 +3211,17 @@ impl Indexing for Image {
     }
 
     #[inline]
-    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors) -> Result<(), IndexingError> {
+    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors) -> Result<(), Error> {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
                 if x >= self.width {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 x
             }
             Bound::Excluded(&x) => {
                 if x + 1 >= self.width {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 x + 1
             }
@@ -3343,13 +3233,13 @@ impl Indexing for Image {
         let index_x_upper: usize = match index.0.end_bound() {
             Bound::Included(&x) => {
                 if x >= self.width {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 x + 1
             }
             Bound::Excluded(&x) => {
                 if x > self.width {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 x
             }
@@ -3361,13 +3251,13 @@ impl Indexing for Image {
         let index_y_lower: usize = match index.1.start_bound() {
             Bound::Included(&y) => {
                 if y >= self.height {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 y
             }
             Bound::Excluded(&y) => {
                 if y + 1 >= self.height {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 y + 1
             }
@@ -3379,13 +3269,13 @@ impl Indexing for Image {
         let index_y_upper: usize = match index.1.end_bound() {
             Bound::Included(&y) => {
                 if y >= self.height {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 y + 1
             }
             Bound::Excluded(&y) => {
                 if y > self.height {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 y
             }
@@ -3395,7 +3285,7 @@ impl Indexing for Image {
         };
 
         if ImageType::from(color) != self.image_type {
-            return Err(IndexingError::WrongColor);
+            return Err(Error::WrongColor);
         }
 
         match color {
@@ -3640,17 +3530,17 @@ impl Indexing for Image {
     }
 
     #[inline]
-    fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors, opacity: f64) -> Result<(), IndexingError> {
+    fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors, opacity: f64) -> Result<(), Error> {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
                 if x >= self.width {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 x
             }
             Bound::Excluded(&x) => {
                 if x + 1 >= self.width {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 x + 1
             }
@@ -3662,13 +3552,13 @@ impl Indexing for Image {
         let index_x_upper: usize = match index.0.end_bound() {
             Bound::Included(&x) => {
                 if x >= self.width {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 x + 1
             }
             Bound::Excluded(&x) => {
                 if x > self.width {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 x
             }
@@ -3680,13 +3570,13 @@ impl Indexing for Image {
         let index_y_lower: usize = match index.1.start_bound() {
             Bound::Included(&y) => {
                 if y >= self.height {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 y
             }
             Bound::Excluded(&y) => {
                 if y + 1 >= self.height {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 y + 1
             }
@@ -3698,13 +3588,13 @@ impl Indexing for Image {
         let index_y_upper: usize = match index.1.end_bound() {
             Bound::Included(&y) => {
                 if y >= self.height {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 y + 1
             }
             Bound::Excluded(&y) => {
                 if y > self.height {
-                    return Err(IndexingError::OutOfBounds);
+                    return Err(Error::OutOfBounds);
                 }
                 y
             }
@@ -3714,7 +3604,7 @@ impl Indexing for Image {
         };
 
         if ImageType::from(color) != self.image_type {
-            return Err(IndexingError::WrongColor);
+            return Err(Error::WrongColor);
         }
 
         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
@@ -3991,17 +3881,17 @@ impl Indexing for Image {
 
 impl IO for Image {
 
-    fn from_bytes(width: usize, height: usize, image_type: ImageType, bytes: &[u8]) -> Result<Image, IOError> {
+    fn from_bytes(width: usize, height: usize, image_type: ImageType, bytes: &[u8]) -> Result<Image, Error> {
         if bytes.len() != width * height * image_type.bytes_per_pixel() || bytes.is_empty() {
-            return Err(IOError::InvalidSize);
+            return Err(Error::InvalidSize);
         }
         match image_type {
             ImageType::GRAY8 => {},
-            ImageType::GRAYA8 | ImageType::GRAY16 => {if bytes.len() % 2 != 0 {return Err(IOError::InvalidSize);}},
-            ImageType::GRAYA16 | ImageType::RGBA8 => {if bytes.len() % 4 != 0 {return Err(IOError::InvalidSize);}},
-            ImageType::RGB8 => {if bytes.len() % 3 != 0 {return Err(IOError::InvalidSize);}},
-            ImageType::RGB16 => {if bytes.len() % 6 != 0 {return Err(IOError::InvalidSize);}},
-            ImageType::RGBA16 => {if bytes.len() % 8 != 0 {return Err(IOError::InvalidSize);}},
+            ImageType::GRAYA8 | ImageType::GRAY16 => {if bytes.len() % 2 != 0 {return Err(Error::InvalidSize);}},
+            ImageType::GRAYA16 | ImageType::RGBA8 => {if bytes.len() % 4 != 0 {return Err(Error::InvalidSize);}},
+            ImageType::RGB8 => {if bytes.len() % 3 != 0 {return Err(Error::InvalidSize);}},
+            ImageType::RGB16 => {if bytes.len() % 6 != 0 {return Err(Error::InvalidSize);}},
+            ImageType::RGBA16 => {if bytes.len() % 8 != 0 {return Err(Error::InvalidSize);}},
         }
 
         let data: Vec<u8> = bytes.to_vec();
@@ -4107,17 +3997,9 @@ impl IO for Image {
     }
 
     #[cfg(feature = "file_io")]
-    fn from_file(path: &str) -> Result<Image, IOError> {
+    fn from_file(path: &str) -> Result<Image, Box<dyn error::Error>> {
 
-        let image: DynamicImage = match (
-            match ImageReader::open(path) {
-                Ok(image) => image,
-                Err(err_type) => return Err(IOError::from(err_type.kind())),
-            }
-        ).decode() {
-            Ok(image) => image,
-            Err(err_type) => return Err(IOError::from(err_type)),
-        };
+        let image: DynamicImage = ImageReader::open(path)?.decode()?;
 
         let img_type = match image.color() {
             ColorType::L8 => ImageType::GRAY8,
@@ -4128,23 +4010,21 @@ impl IO for Image {
             ColorType::Rgba8 => ImageType::RGBA8,
             ColorType::Rgb16 => ImageType::RGB16,
             ColorType::Rgba16 => ImageType::RGBA16,
-            _ => return Err(IOError::InvalidType),
+            _ => return Err(Box::new(Error::InvalidType)),
         };
 
         Self::from_bytes(image.width() as usize, image.height() as usize, img_type, image.as_bytes())
+            .map_err(|err_type| Box::new(err_type) as Box<dyn error::Error>)
     }
 
     #[cfg(feature = "file_io")]
-    fn to_file(&self, path: &str, overwrite: bool) -> Result<(), IOError> {
+    fn to_file(&self, path: &str, overwrite: bool) -> Result<(), Box<dyn error::Error>> {
         let file_path = Path::new(path);
         if file_path.is_file() {
             if overwrite {
-                match remove_file(file_path) {
-                    Ok(_) => (),
-                    Err(err_type) => return Err(IOError::from(err_type.kind())),
-                }
+                remove_file(file_path)?;
             } else {
-                return Err(IOError::FileExists);
+                return Err(Box::new(Error::FileExists));
             }
         }
         save_buffer(file_path, self.to_bytes_ref(), self.width as u32, self.height as u32, ColorType::from(self.image_type))?;
@@ -4177,19 +4057,9 @@ impl Utilities for Image {
     fn clear(&mut self) {
         match &self.background_data {
             BackgroundData::Color(background_color) => {
-                let color_slice: &[u8] = match *background_color {
-                    Colors::GRAY8(color) => unsafe {slice_from_raw_parts(&[color] as *const u8, 1).as_ref().expect("Shouldn't fail!")},
-                    Colors::GRAYA8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 2).as_ref().expect("Shouldn't fail!")},
-                    Colors::GRAY16(color) => unsafe {slice_from_raw_parts(&[color] as *const u16 as *const u8, 2).as_ref().expect("Shouldn't fail!")},
-                    Colors::GRAYA16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 4).as_ref().expect("Shouldn't fail!")},
-                    Colors::RGB8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 3).as_ref().expect("Shouldn't fail!")},
-                    Colors::RGBA8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 4).as_ref().expect("Shouldn't fail!")},
-                    Colors::RGB16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 6).as_ref().expect("Shouldn't fail!")},
-                    Colors::RGBA16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 8).as_ref().expect("Shouldn't fail!")},
-                };
-                let background_len = background_color.bytes_per_pixel();
+                let color_slice = background_color.as_slice();
                 for x in 0..self.data.len() {
-                    self.data[x] = color_slice[x % background_len];
+                    self.data[x] = color_slice[x % color_slice.len()];
                 }
             },
             BackgroundData::Image(background_bytes) => {
@@ -4198,9 +4068,9 @@ impl Utilities for Image {
         }
     }
 
-    fn fill_image(&mut self, color: Colors) -> Result<(), DrawingError> {
+    fn fill_image(&mut self, color: Colors) -> Result<(), Error> {
         if ImageType::from(color) != self.image_type {
-            return Err(DrawingError::WrongColor);
+            return Err(Error::WrongColor);
         }
         self.fill_unchecked((.., ..), color);
         Ok(())
@@ -4287,20 +4157,10 @@ impl Utilities for Image {
 
 impl Image {
     pub fn new(width: usize, height: usize, background: Colors) -> Self {
-        let color_slice: &[u8] = match background {
-            Colors::GRAY8(color) => unsafe {slice_from_raw_parts(&[color] as *const u8, 1).as_ref().expect("Shouldn't fail!")},
-            Colors::GRAYA8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 2).as_ref().expect("Shouldn't fail!")},
-            Colors::GRAY16(color) => unsafe {slice_from_raw_parts(&[color] as *const u16 as *const u8, 2).as_ref().expect("Shouldn't fail!")},
-            Colors::GRAYA16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 4).as_ref().expect("Shouldn't fail!")},
-            Colors::RGB8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 3).as_ref().expect("Shouldn't fail!")},
-            Colors::RGBA8(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 4).as_ref().expect("Shouldn't fail!")},
-            Colors::RGB16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 6).as_ref().expect("Shouldn't fail!")},
-            Colors::RGBA16(color) => unsafe {slice_from_raw_parts((color).as_ptr() as *const u8, 8).as_ref().expect("Shouldn't fail!")},
-        };
-        let background_len = background.bytes_per_pixel();
-        let mut data: Vec<u8> = vec![0; width * height * background_len];
+        let color_slice = background.as_slice();
+        let mut data: Vec<u8> = vec![0; width * height * color_slice.len()];
         for x in 0..data.len() {
-            data[x] = color_slice[x % background_len];
+            data[x] = color_slice[x % color_slice.len()];
         }
 
         Self {

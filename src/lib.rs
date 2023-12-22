@@ -32,16 +32,4 @@
 pub mod image;
 
 #[doc(inline)]
-pub use image::{
-    Conversions,
-    Colors,
-    Drawing,
-    DrawingError,
-    Image,
-    ImageType,
-    Indexing,
-    IndexingError,
-    IO,
-    IOError,
-    Utilities,
-};
+pub use image::*;
