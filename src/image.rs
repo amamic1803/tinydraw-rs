@@ -35,7 +35,7 @@ use image_io::{
 
 
 /// An enum that represents errors that can occur while using this library
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Error {
     /// The file already exists
     FileExists,
@@ -69,7 +69,7 @@ impl Display for Error {
 
 
 /// A struct that holds an image
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Image {
     /// The image pixel data
     data: Vec<u8>,
@@ -93,7 +93,7 @@ impl Display for Image {
 
 
 /// An enum that holds the background information for [Image]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 enum BackgroundData {
     /// The background is a color
     Color(Colors),
@@ -102,7 +102,7 @@ enum BackgroundData {
 }
 
 /// An enum that holds the color information
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Colors {
     /// The 8-bit grayscale color
     GRAY8(u8),
@@ -121,9 +121,39 @@ pub enum Colors {
     /// The 16-bit RGB color + 16-bit alpha channel
     RGBA16([u16; 4]),
 }
+impl Display for Colors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Colors::GRAY8(value) => write!(f, "GRAY8({:?})", value),
+            Colors::GRAYA8(value) => write!(f, "GRAYA8({:?})", value),
+            Colors::GRAY16(value) => write!(f, "GRAY16({:?})", value),
+            Colors::GRAYA16(value) => write!(f, "GRAYA16({:?})", value),
+            Colors::RGB8(value) => write!(f, "RGB8({:?})", value),
+            Colors::RGBA8(value) => write!(f, "RGBA8({:?})", value),
+            Colors::RGB16(value) => write!(f, "RGB16({:?})", value),
+            Colors::RGBA16(value) => write!(f, "RGBA16({:?})", value),
+        }
+    }
+}
+impl Colors {
+    /// Returns the bytes of the color
+    fn as_slice(&self) -> &[u8] {
+
+        match self {
+            Colors::GRAY8(color) => slice::from_ref(color),
+            Colors::GRAYA8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 2)},
+            Colors::GRAY16(color) => unsafe {slice::from_raw_parts(color as *const u16 as *const u8, 2)},
+            Colors::GRAYA16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 4)},
+            Colors::RGB8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 3)},
+            Colors::RGBA8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 4)},
+            Colors::RGB16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 6)},
+            Colors::RGBA16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 8)},
+        }
+    }
+}
 
 /// An enum that holds the image type information
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ImageType {
     /// An image with 8-bit grayscale pixels
     GRAY8,
@@ -142,57 +172,6 @@ pub enum ImageType {
     /// An image with 16-bit RGB pixels + 16-bit alpha channel
     RGBA16,
 }
-
-impl Colors {
-    fn as_slice(&self) -> &[u8] {
-        //! Returns the bytes of the color
-
-        match self {
-            Colors::GRAY8(color) => slice::from_ref(color),
-            Colors::GRAYA8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 2)},
-            Colors::GRAY16(color) => unsafe {slice::from_raw_parts(color as *const u16 as *const u8, 2)},
-            Colors::GRAYA16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 4)},
-            Colors::RGB8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 3)},
-            Colors::RGBA8(color) => unsafe {slice::from_raw_parts(color.as_ptr(), 4)},
-            Colors::RGB16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 6)},
-            Colors::RGBA16(color) => unsafe {slice::from_raw_parts(color.as_ptr() as *const u8, 8)},
-        }
-    }
-}
-
-impl ImageType {
-
-    #[inline]
-    fn bytes_per_pixel(&self) -> usize {
-        //! Returns the number of bytes per pixel
-
-        match self {
-            ImageType::GRAY8 => 1,
-            ImageType::GRAYA8 => 2,
-            ImageType::GRAY16 => 2,
-            ImageType::GRAYA16 => 4,
-            ImageType::RGB8 => 3,
-            ImageType::RGBA8 => 4,
-            ImageType::RGB16 => 6,
-            ImageType::RGBA16 => 8,
-        }
-    }
-}
-
-impl Display for Colors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Colors::GRAY8(value) => write!(f, "GRAY8({:?})", value),
-            Colors::GRAYA8(value) => write!(f, "GRAYA8({:?})", value),
-            Colors::GRAY16(value) => write!(f, "GRAY16({:?})", value),
-            Colors::GRAYA16(value) => write!(f, "GRAYA16({:?})", value),
-            Colors::RGB8(value) => write!(f, "RGB8({:?})", value),
-            Colors::RGBA8(value) => write!(f, "RGBA8({:?})", value),
-            Colors::RGB16(value) => write!(f, "RGB16({:?})", value),
-            Colors::RGBA16(value) => write!(f, "RGBA16({:?})", value),
-        }
-    }
-}
 impl Display for ImageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -207,7 +186,23 @@ impl Display for ImageType {
         }
     }
 }
+impl ImageType {
+    /// Returns the number of bytes per pixel
+    #[inline]
+    fn bytes_per_pixel(&self) -> usize {
 
+        match self {
+            ImageType::GRAY8 => 1,
+            ImageType::GRAYA8 => 2,
+            ImageType::GRAY16 => 2,
+            ImageType::GRAYA16 => 4,
+            ImageType::RGB8 => 3,
+            ImageType::RGBA8 => 4,
+            ImageType::RGB16 => 6,
+            ImageType::RGBA16 => 8,
+        }
+    }
+}
 impl From<Colors> for ImageType {
     fn from(color: Colors) -> Self {
         match color {
@@ -222,7 +217,6 @@ impl From<Colors> for ImageType {
         }
     }
 }
-
 #[cfg(feature = "file_io")]
 impl From<ImageType> for ColorType {
     fn from(color: ImageType) -> Self {
@@ -1443,7 +1437,7 @@ pub trait Indexing {
     /// # Arguments
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// # Returns
-    /// * [Result] which holds the index of the first byte of the pixel or [Err] with [IndexingError].
+    /// * [Result] which holds the index of the first byte of the pixel or [Err] with [Error].
     fn index(&self, index: (usize, usize)) -> Result<usize, Error>;
 
     /// Returns the index of the first byte of the pixel at the given coordinates without performing checks.
@@ -1457,7 +1451,7 @@ pub trait Indexing {
     /// # Arguments
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// # Returns
-    /// * [Result] which holds the value of the pixel or [Err] with [IndexingError].
+    /// * [Result] which holds the value of the pixel or [Err] with [Error].
     fn get(&self, index: (usize, usize)) -> Result<Colors, Error>;
 
     /// Returns the value of the pixel at the given coordinates without performing checks.
@@ -1472,7 +1466,7 @@ pub trait Indexing {
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// * ```value``` - The value to set.
     /// # Returns
-    /// * [Result] which holds [Ok] or [Err] with [IndexingError].
+    /// * [Result] which holds [Ok] or [Err] with [Error].
     fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), Error>;
 
     /// Sets the value of the pixel at the given coordinates without performing checks.
@@ -1487,7 +1481,7 @@ pub trait Indexing {
     /// * ```value``` - The value to set.
     /// * ```opacity``` - The opacity of the new value.
     /// # Returns
-    /// * [Result] which holds [Ok] or [Err] with [IndexingError].
+    /// * [Result] which holds [Ok] or [Err] with [Error].
     fn set_transparent(&mut self, index: (usize, usize), color: Colors, opacity: f64) -> Result<(), Error>;
 
     /// Sets the value of the pixel by blending it with the current value at the given coordinates without performing checks.
@@ -1502,7 +1496,7 @@ pub trait Indexing {
     /// * ```index``` - The tuple with the ranges of the image to fill.
     /// * ```value``` - The value to fill with.
     /// # Returns
-    /// * [Result] which holds [Ok] or [Err] with [IndexingError].
+    /// * [Result] which holds [Ok] or [Err] with [Error].
     fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors) -> Result<(), Error>;
 
     /// Fills the given range in image with the given value without performing checks.
@@ -1517,7 +1511,7 @@ pub trait Indexing {
     /// * ```value``` - The value to fill with.
     /// * ```opacity``` - The opacity of the new value.
     /// # Returns
-    /// * [Result] which holds [Ok] or [Err] with [IndexingError].
+    /// * [Result] which holds [Ok] or [Err] with [Error].
     fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors, opacity: f64) -> Result<(), Error>;
 
     /// Fills the given range in image with the given value by blending it with the current value without performing checks.
@@ -1538,7 +1532,7 @@ pub trait IO {
     /// * ```image_type``` - The type of the image.
     /// * ```bytes``` - The bytes of the image.
     /// # Returns
-    /// * [Result] which holds new [Image] or [Err] with [IOError].
+    /// * [Result] which holds new [Image] or [Err] with [Error].
     fn from_bytes(width: usize, height: usize, image_type: ImageType, bytes: &[u8]) -> Result<Image, Error>;
 
     /// Returns the bytes of the image as a vector.
@@ -1560,7 +1554,7 @@ pub trait IO {
     /// # Arguments
     /// * ```path``` - The path to the file.
     /// # Returns
-    /// * [Result] which holds new [Image] or [Err] with [IOError].
+    /// * [Result] which holds new [Image] or [Box<dyn error::Error>].
     #[cfg(feature = "file_io")]
     fn from_file(path: &str) -> Result<Image, Box<dyn error::Error>>;
 
@@ -1569,7 +1563,7 @@ pub trait IO {
     /// * ```path``` - The path to the file.
     /// * ```overwrite``` - Whether to overwrite the file if it already exists.
     /// # Returns
-    /// * [Result] which holds [Ok] or [Err] with [IOError].
+    /// * [Result] which holds [Ok] or [Box<dyn error::Error>].
     #[cfg(feature = "file_io")]
     fn to_file(&self, path: &str, overwrite: bool) -> Result<(), Box<dyn error::Error>>;
 }
@@ -2703,8 +2697,25 @@ impl Image<[u8; 3]> {
 }
 */
 
-impl Conversions for Image {
+impl Image {
+    pub fn new(width: usize, height: usize, background: Colors) -> Self {
+        let color_slice = background.as_slice();
+        let mut data = vec![0; width * height * color_slice.len()];
+        for x in 0..data.len() {
+            data[x] = color_slice[x % color_slice.len()];
+        }
 
+        Self {
+            data,
+            width,
+            height,
+            image_type: ImageType::from(background),
+            background_data: BackgroundData::Color(background),
+        }
+    }
+}
+
+impl Conversions for Image {
     fn convert(&mut self, image_type: ImageType) {
         if self.image_type != image_type {
             // convert image data
@@ -2998,7 +3009,6 @@ impl Indexing for Image {
         ((self.height - index.1 - 1) * self.width + index.0) * self.image_type.bytes_per_pixel()
     }
 
-    #[inline]
     fn get(&self, index: (usize, usize)) -> Result<Colors, Error> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(Error::OutOfBounds)
@@ -3007,7 +3017,6 @@ impl Indexing for Image {
         }
     }
 
-    #[inline]
     fn get_unchecked(&self, index: (usize, usize)) -> Colors {
         let index_temp: usize = self.index_unchecked(index);
         match self.image_type {
@@ -3050,7 +3059,6 @@ impl Indexing for Image {
         }
     }
 
-    #[inline]
     fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), Error> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(Error::OutOfBounds)
@@ -3062,7 +3070,6 @@ impl Indexing for Image {
         }
     }
 
-    #[inline]
     fn set_unchecked(&mut self, index: (usize, usize), color: Colors) {
         let index_temp: usize = self.index_unchecked(index);
 
@@ -3116,7 +3123,6 @@ impl Indexing for Image {
         }
     }
 
-    #[inline]
     fn set_transparent(&mut self, index: (usize, usize), color: Colors, opacity: f64) -> Result<(), Error> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(Error::OutOfBounds)
@@ -3137,7 +3143,6 @@ impl Indexing for Image {
         }
     }
 
-    #[inline]
     fn set_transparent_unchecked(&mut self, index: (usize, usize), color: Colors, opacity: f64) {
         if opacity == 1.0 {
             self.set_unchecked(index, color);
@@ -3210,7 +3215,6 @@ impl Indexing for Image {
         }
     }
 
-    #[inline]
     fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors) -> Result<(), Error> {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
@@ -3384,7 +3388,6 @@ impl Indexing for Image {
         Ok(())
     }
 
-    #[inline]
     fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors) {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
@@ -3529,7 +3532,6 @@ impl Indexing for Image {
         }
     }
 
-    #[inline]
     fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors, opacity: f64) -> Result<(), Error> {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
@@ -3718,7 +3720,6 @@ impl Indexing for Image {
         Ok(())
     }
 
-    #[inline]
     fn fill_transparent_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Colors, opacity: f64) {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
@@ -3882,6 +3883,8 @@ impl Indexing for Image {
 impl IO for Image {
 
     fn from_bytes(width: usize, height: usize, image_type: ImageType, bytes: &[u8]) -> Result<Image, Error> {
+
+        // check for valid size
         if bytes.len() != width * height * image_type.bytes_per_pixel() || bytes.is_empty() {
             return Err(Error::InvalidSize);
         }
@@ -3894,9 +3897,11 @@ impl IO for Image {
             ImageType::RGBA16 => {if bytes.len() % 8 != 0 {return Err(Error::InvalidSize);}},
         }
 
-        let data: Vec<u8> = bytes.to_vec();
-        let mut same_data: bool = true;
+        // copy data
+        let data = bytes.to_vec();
 
+        // check if all pixels have the same color
+        let mut same_data = true;
         match image_type {
             ImageType::GRAY8 => {
                 let mut data_iterator = data.iter();
@@ -3955,6 +3960,7 @@ impl IO for Image {
             },
         }
 
+        // if they do, store the color instead of the image data
         let background_data = if same_data {
             BackgroundData::Color(match image_type {
                 ImageType::GRAY8 => Colors::GRAY8(data[0]),
@@ -4070,10 +4076,11 @@ impl Utilities for Image {
 
     fn fill_image(&mut self, color: Colors) -> Result<(), Error> {
         if ImageType::from(color) != self.image_type {
-            return Err(Error::WrongColor);
+            Err(Error::WrongColor)
+        } else {
+            self.fill_unchecked((.., ..), color);
+            Ok(())
         }
-        self.fill_unchecked((.., ..), color);
-        Ok(())
     }
 
     fn save_background(&mut self) {
@@ -4155,24 +4162,6 @@ impl Utilities for Image {
     }
 }
 
-impl Image {
-    pub fn new(width: usize, height: usize, background: Colors) -> Self {
-        let color_slice = background.as_slice();
-        let mut data: Vec<u8> = vec![0; width * height * color_slice.len()];
-        for x in 0..data.len() {
-            data[x] = color_slice[x % color_slice.len()];
-        }
-
-        Self {
-            data,
-            width,
-            height,
-            image_type: ImageType::from(background),
-            background_data: BackgroundData::Color(background),
-        }
-    }
-}
-
 
 
 
@@ -4181,1475 +4170,349 @@ impl Image {
 mod tests {
     use super::*;
 
+    fn conversion_test(img1_colors: (Colors, Colors), img2_colors: (Colors, Colors)) {
+        assert_eq!(ImageType::from(img1_colors.0), ImageType::from(img1_colors.1));
+        assert_eq!(ImageType::from(img2_colors.0), ImageType::from(img2_colors.1));
+
+        let new_image_type = ImageType::from(img2_colors.0);
+
+        // simple conversion
+        let mut img1 = Image::new(100, 100, img1_colors.0);
+        let img2 = Image::new(100, 100, img2_colors.0);
+        img1.convert(new_image_type);
+        assert_eq!(img1, img2);
+        assert_eq!(img1.image_type, new_image_type);
+
+        // more complex conversion
+        let mut img1 = Image::new(100, 100, img1_colors.0);
+        img1.set((0, 0), img1_colors.1).unwrap();
+        img1.save_background();
+        let mut img2 = Image::new(100, 100, img2_colors.0);
+        img2.set((0, 0), img2_colors.1).unwrap();
+        img2.save_background();
+        img1.convert(new_image_type);
+        assert_eq!(img1, img2);
+        assert_eq!(img1.image_type, new_image_type);
+    }
+
     #[test]
     fn conversions_gray8_to_gray8() {
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        let image2 = Image::new(100, 100, Colors::GRAY8(120));
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
-
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        image.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
-        image2.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
+        conversion_test((Colors::GRAY8(120), Colors::GRAY8(140)), (Colors::GRAY8(120), Colors::GRAY8(140)));
     }
 
     #[test]
     fn conversions_gray8_to_graya8() {
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
-
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        image.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image2.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
+        conversion_test((Colors::GRAY8(120), Colors::GRAY8(140)), (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])));
     }
 
     #[test]
     fn conversions_gray8_to_gray16() {
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
-
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        image.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-        image2.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
+        conversion_test((Colors::GRAY8(120), Colors::GRAY8(140)), (Colors::GRAY16(30_840), Colors::GRAY16(35_980)));
     }
 
     #[test]
     fn conversions_gray8_to_graya16() {
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
-
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        image.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image2.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
+        conversion_test((Colors::GRAY8(120), Colors::GRAY8(140)), (Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])));
     }
 
     #[test]
     fn conversions_gray8_to_rgb8() {
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        let image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
-
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        image.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
-        image2.set((0, 0), Colors::RGB8([140, 140, 140])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
+        conversion_test((Colors::GRAY8(120), Colors::GRAY8(140)), (Colors::RGB8([120, 120, 120]), Colors::RGB8([140, 140, 140])));
     }
 
     #[test]
     fn conversions_gray8_to_rgba8() {
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        let image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
-
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        image.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
-        image2.set((0, 0), Colors::RGBA8([140, 140, 140, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
+        conversion_test((Colors::GRAY8(120), Colors::GRAY8(140)), (Colors::RGBA8([120, 120, 120, 255]), Colors::RGBA8([140, 140, 140, 255])));
     }
 
     #[test]
     fn conversions_gray8_to_rgb16() {
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        let image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
-
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        image.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
-        image2.set((0, 0), Colors::RGB16([35_980, 35_980, 35_980])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
+        conversion_test((Colors::GRAY8(120), Colors::GRAY8(140)), (Colors::RGB16([30_840, 30_840, 30_840]), Colors::RGB16([35_980, 35_980, 35_980])));
     }
 
     #[test]
     fn conversions_gray8_to_rgba16() {
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        let image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
-
-        let mut image = Image::new(100, 100, Colors::GRAY8(120));
-        image.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
-        image2.set((0, 0), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
+        conversion_test((Colors::GRAY8(120), Colors::GRAY8(140)), (Colors::RGBA16([30_840, 30_840, 30_840, 65_535]), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])));
     }
 
     #[test]
     fn conversions_graya8_to_gray8() {
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        let image2 = Image::new(100, 100, Colors::GRAY8(120));
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
-        image2.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
+        conversion_test((Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])), (Colors::GRAY8(120), Colors::GRAY8(140)));
     }
 
     #[test]
     fn conversions_graya8_to_graya8() {
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image2.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
+        conversion_test((Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])), (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])));
     }
 
     #[test]
     fn conversions_graya8_to_gray16() {
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-        image2.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
+        conversion_test((Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])), (Colors::GRAY16(30_840), Colors::GRAY16(35_980)));
     }
 
     #[test]
     fn conversions_graya8_to_graya16() {
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image2.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
+        conversion_test((Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])), (Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])));
     }
 
     #[test]
     fn conversions_graya8_to_rgb8() {
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        let image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
-        image2.set((0, 0), Colors::RGB8([140, 140, 140])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
+        conversion_test((Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])), (Colors::RGB8([120, 120, 120]), Colors::RGB8([140, 140, 140])));
     }
 
     #[test]
     fn conversions_graya8_to_rgba8() {
-        let mut image = Image::new(10, 10, Colors::GRAYA8([120, 255]));
-        let image2 = Image::new(10, 10, Colors::RGBA8([120, 120, 120, 255]));
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
-        image2.set((0, 0), Colors::RGBA8([140, 140, 140, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
+        conversion_test((Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])), (Colors::RGBA8([120, 120, 120, 255]), Colors::RGBA8([140, 140, 140, 255])));
     }
 
     #[test]
     fn conversions_graya8_to_rgb16() {
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        let image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
-        image2.set((0, 0), Colors::RGB16([35_980, 35_980, 35_980])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
+        conversion_test((Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])), (Colors::RGB16([30_840, 30_840, 30_840]), Colors::RGB16([35_980, 35_980, 35_980])));
     }
 
     #[test]
     fn conversions_graya8_to_rgba16() {
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        let image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
-        image2.set((0, 0), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
+        conversion_test((Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])), (Colors::RGBA16([30_840, 30_840, 30_840, 65_535]), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])));
     }
 
     #[test]
     fn conversions_gray16_to_gray8() {
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        let image2 = Image::new(100, 100, Colors::GRAY8(120));
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
-
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        image.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
-        image2.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
+        conversion_test((Colors::GRAY16(30_840), Colors::GRAY16(35_980)), (Colors::GRAY8(120), Colors::GRAY8(140)));
     }
 
     #[test]
     fn conversions_gray16_to_graya8() {
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
-
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        image.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image2.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
+        conversion_test((Colors::GRAY16(30_840), Colors::GRAY16(35_980)), (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])));
     }
 
     #[test]
     fn conversions_gray16_to_gray16() {
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
-
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        image.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-        image2.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
+        conversion_test((Colors::GRAY16(30_840), Colors::GRAY16(35_980)), (Colors::GRAY16(30_840), Colors::GRAY16(35_980)));
     }
 
     #[test]
     fn conversions_gray16_to_graya16() {
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
-
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        image.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image2.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
+        conversion_test((Colors::GRAY16(30_840), Colors::GRAY16(35_980)), (Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])));
     }
 
     #[test]
     fn conversions_gray16_to_rgb8() {
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        let image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
-
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        image.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
-        image2.set((0, 0), Colors::RGB8([140, 140, 140])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
+        conversion_test((Colors::GRAY16(30_840), Colors::GRAY16(35_980)), (Colors::RGB8([120, 120, 120]), Colors::RGB8([140, 140, 140])));
     }
 
     #[test]
     fn conversions_gray16_to_rgba8() {
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        let image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
-
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        image.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
-        image2.set((0, 0), Colors::RGBA8([140, 140, 140, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
+        conversion_test((Colors::GRAY16(30_840), Colors::GRAY16(35_980)), (Colors::RGBA8([120, 120, 120, 255]), Colors::RGBA8([140, 140, 140, 255])));
     }
 
     #[test]
     fn conversions_gray16_to_rgb16() {
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        let image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
-
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        image.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
-        image2.set((0, 0), Colors::RGB16([35_980, 35_980, 35_980])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
+        conversion_test((Colors::GRAY16(30_840), Colors::GRAY16(35_980)), (Colors::RGB16([30_840, 30_840, 30_840]), Colors::RGB16([35_980, 35_980, 35_980])));
     }
 
     #[test]
     fn conversions_gray16_to_rgba16() {
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        let image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
-
-        let mut image = Image::new(100, 100, Colors::GRAY16(30_840));
-        image.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
-        image2.set((0, 0), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
+        conversion_test((Colors::GRAY16(30_840), Colors::GRAY16(35_980)), (Colors::RGBA16([30_840, 30_840, 30_840, 65_535]), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])));
     }
 
     #[test]
     fn conversions_graya16_to_gray8() {
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        let image2 = Image::new(100, 100, Colors::GRAY8(120));
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
-        image2.set((0, 0), Colors::GRAY8(140)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
+        conversion_test((Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])), (Colors::GRAY8(120), Colors::GRAY8(140)));
     }
 
     #[test]
     fn conversions_graya16_to_graya8() {
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image2.set((0, 0), Colors::GRAYA8([140, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
+        conversion_test((Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])), (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])));
     }
 
     #[test]
     fn conversions_graya16_to_gray16() {
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-        image2.set((0, 0), Colors::GRAY16(35_980)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
+        conversion_test((Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])), (Colors::GRAY16(30_840), Colors::GRAY16(35_980)));
     }
 
     #[test]
     fn conversions_graya16_to_graya16() {
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image2.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
+        conversion_test((Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])), (Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])));
     }
 
     #[test]
     fn conversions_graya16_to_rgb8() {
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        let image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB8([120, 120, 120]));
-        image2.set((0, 0), Colors::RGB8([140, 140, 140])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
+        conversion_test((Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])), (Colors::RGB8([120, 120, 120]), Colors::RGB8([140, 140, 140])));
     }
 
     #[test]
     fn conversions_graya16_to_rgba8() {
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        let image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA8([120, 120, 120, 255]));
-        image2.set((0, 0), Colors::RGBA8([140, 140, 140, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
+        conversion_test((Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])), (Colors::RGBA8([120, 120, 120, 255]), Colors::RGBA8([140, 140, 140, 255])));
     }
 
     #[test]
     fn conversions_graya16_to_rgb16() {
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        let image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB16([30_840, 30_840, 30_840]));
-        image2.set((0, 0), Colors::RGB16([35_980, 35_980, 35_980])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
+        conversion_test((Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])), (Colors::RGB16([30_840, 30_840, 30_840]), Colors::RGB16([35_980, 35_980, 35_980])));
     }
 
     #[test]
     fn conversions_graya16_to_rgba16() {
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        let image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
-
-        let mut image = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image.set((0, 0), Colors::GRAYA16([35_980, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA16([30_840, 30_840, 30_840, 65_535]));
-        image2.set((0, 0), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
+        conversion_test((Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([35_980, 65_535])), (Colors::RGBA16([30_840, 30_840, 30_840, 65_535]), Colors::RGBA16([35_980, 35_980, 35_980, 65_535])));
     }
 
     #[test]
     fn conversions_rgb8_to_gray8() {
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        let image2 = Image::new(100, 100, Colors::GRAY8(120));
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
-
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
-        image2.set((0, 0), Colors::GRAY8(150)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
+        conversion_test((Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])), (Colors::GRAY8(120), Colors::GRAY8(150)));
     }
 
     #[test]
     fn conversions_rgb8_to_graya8() {
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
-
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image2.set((0, 0), Colors::GRAYA8([150, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8); }
+        conversion_test((Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])), (Colors::GRAYA8([120, 255]), Colors::GRAYA8([150, 255])));
+    }
 
     #[test]
     fn conversions_rgb8_to_gray16() {
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
-
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-        image2.set((0, 0), Colors::GRAY16(38_550)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
+        conversion_test((Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])), (Colors::GRAY16(30_840), Colors::GRAY16(38_550)));
     }
 
     #[test]
     fn conversions_rgb8_to_graya16() {
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
-
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image2.set((0, 0), Colors::GRAYA16([38_550, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
+        conversion_test((Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])), (Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([38_550, 65_535])));
     }
 
     #[test]
     fn conversions_rgb8_to_rgb8() {
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        let image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
-
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image2.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
+        conversion_test((Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])), (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])));
     }
 
     #[test]
     fn conversions_rgb8_to_rgba8() {
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        let image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 255]));
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
-
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 255]));
-        image2.set((0, 0), Colors::RGBA8([140, 150, 160, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
+        conversion_test((Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])), (Colors::RGBA8([110, 120, 130, 255]), Colors::RGBA8([140, 150, 160, 255])));
     }
 
     #[test]
     fn conversions_rgb8_to_rgb16() {
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        let image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
-
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image2.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
+        conversion_test((Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])), (Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])));
     }
 
     #[test]
     fn conversions_rgb8_to_rgba16() {
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        let image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
-
-        let mut image = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image2.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
+        conversion_test((Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])), (Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])));
     }
 
     #[test]
     fn conversions_rgba8_to_gray8() {
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        let image2 = Image::new(100, 100, Colors::GRAY8(120));
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
-
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
-        image2.set((0, 0), Colors::GRAY8(150)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
+        conversion_test((Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])), (Colors::GRAY8(120), Colors::GRAY8(150)));
     }
 
     #[test]
     fn conversions_rgba8_to_graya8() {
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 140]));
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
-
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 140]));
-        image2.set((0, 0), Colors::GRAYA8([150, 170])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
+        conversion_test((Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])), (Colors::GRAYA8([120, 140]), Colors::GRAYA8([150, 170])));
     }
 
     #[test]
     fn conversions_rgba8_to_gray16() {
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
-
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-        image2.set((0, 0), Colors::GRAY16(38_550)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
+        conversion_test((Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])), (Colors::GRAY16(30_840), Colors::GRAY16(38_550)));
     }
 
     #[test]
     fn conversions_rgba8_to_graya16() {
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 35_980]));
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
-
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 35_980]));
-        image2.set((0, 0), Colors::GRAYA16([38_550, 43_690])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
+        conversion_test((Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])), (Colors::GRAYA16([30_840, 35_980]), Colors::GRAYA16([38_550, 43_690])));
     }
 
     #[test]
     fn conversions_rgba8_to_rgb8() {
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        let image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
-
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image2.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
+        conversion_test((Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])), (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])));
     }
 
     #[test]
     fn conversions_rgba8_to_rgba8() {
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        let image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
-
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image2.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
+        conversion_test((Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])), (Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])));
     }
 
     #[test]
     fn conversions_rgba8_to_rgb16() {
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        let image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
-
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image2.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
+        conversion_test((Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])), (Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])));
     }
 
     #[test]
     fn conversions_rgba8_to_rgba16() {
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        let image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 35_980]));
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
-
-        let mut image = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 140]));
-        image.set((0, 0), Colors::RGBA8([140, 150, 160, 170])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 35_980]));
-        image2.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 43_690])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
+        conversion_test((Colors::RGBA8([110, 120, 130, 140]), Colors::RGBA8([140, 150, 160, 170])), (Colors::RGBA16([28_270, 30_840, 33_410, 35_980]), Colors::RGBA16([35_980, 38_550, 41_120, 43_690])));
     }
 
     #[test]
     fn conversions_rgb16_to_gray8() {
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        let image2 = Image::new(100, 100, Colors::GRAY8(120));
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
-
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
-        image2.set((0, 0), Colors::GRAY8(150)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
+        conversion_test((Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])), (Colors::GRAY8(120), Colors::GRAY8(150)));
     }
 
     #[test]
     fn conversions_rgb16_to_graya8() {
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
-
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image2.set((0, 0), Colors::GRAYA8([150, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
+        conversion_test((Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])), (Colors::GRAYA8([120, 255]), Colors::GRAYA8([150, 255])));
     }
 
     #[test]
     fn conversions_rgb16_to_gray16() {
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
-
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-        image2.set((0, 0), Colors::GRAY16(38_550)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
+        conversion_test((Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])), (Colors::GRAY16(30_840), Colors::GRAY16(38_550)));
     }
 
     #[test]
-    fn conversions_rgb16_to_graya16(){
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
-
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image2.set((0, 0), Colors::GRAYA16([38_550, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
+    fn conversions_rgb16_to_graya16() {
+        conversion_test((Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])), (Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([38_550, 65_535])));
     }
 
     #[test]
     fn conversions_rgb16_to_rgb8() {
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        let image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
-
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image2.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
+        conversion_test((Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])), (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])));
     }
 
     #[test]
     fn conversions_rgb16_to_rgba8() {
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        let image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 255]));
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
-
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 255]));
-        image2.set((0, 0), Colors::RGBA8([140, 150, 160, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
+        conversion_test((Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])), (Colors::RGBA8([110, 120, 130, 255]), Colors::RGBA8([140, 150, 160, 255])));
     }
 
     #[test]
     fn conversions_rgb16_to_rgb16() {
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        let image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
-
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image2.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
+        conversion_test((Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])), (Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])));
     }
 
     #[test]
     fn conversions_rgb16_to_rgba16() {
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        let image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
-
-        let mut image = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image2.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
+        conversion_test((Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])), (Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])));
     }
 
     #[test]
     fn conversions_rgba16_to_gray8() {
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        let image2 = Image::new(100, 100, Colors::GRAY8(120));
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
-
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY8(120));
-        image2.set((0, 0), Colors::GRAY8(150)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY8);
+        conversion_test((Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])), (Colors::GRAY8(120), Colors::GRAY8(150)));
     }
 
     #[test]
     fn conversions_rgba16_to_graya8() {
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        let image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
-
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA8([120, 255]));
-        image2.set((0, 0), Colors::GRAYA8([150, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA8);
+        conversion_test((Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])), (Colors::GRAYA8([120, 255]), Colors::GRAYA8([150, 255])));
     }
 
     #[test]
     fn conversions_rgba16_to_gray16() {
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        let image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
-
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAY16(30_840));
-        image2.set((0, 0), Colors::GRAY16(38_550)).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAY16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAY16);
+        conversion_test((Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])), (Colors::GRAY16(30_840), Colors::GRAY16(38_550)));
     }
 
     #[test]
     fn conversions_rgba16_to_graya16() {
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        let image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
-
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::GRAYA16([30_840, 65_535]));
-        image2.set((0, 0), Colors::GRAYA16([38_550, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::GRAYA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::GRAYA16);
+        conversion_test((Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])), (Colors::GRAYA16([30_840, 65_535]), Colors::GRAYA16([38_550, 65_535])));
     }
 
     #[test]
     fn conversions_rgba16_to_rgb8() {
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        let image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
-
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB8([110, 120, 130]));
-        image2.set((0, 0), Colors::RGB8([140, 150, 160])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB8);
+        conversion_test((Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])), (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])));
     }
 
     #[test]
     fn conversions_rgba16_to_rgba8() {
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        let image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 255]));
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
-
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA8([110, 120, 130, 255]));
-        image2.set((0, 0), Colors::RGBA8([140, 150, 160, 255])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA8);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA8);
+        conversion_test((Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])), (Colors::RGBA8([110, 120, 130, 255]), Colors::RGBA8([140, 150, 160, 255])));
     }
 
     #[test]
     fn conversions_rgba16_to_rgb16() {
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        let image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
-
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGB16([28_270, 30_840, 33_410]));
-        image2.set((0, 0), Colors::RGB16([35_980, 38_550, 41_120])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGB16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGB16);
+        conversion_test((Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])), (Colors::RGB16([28_270, 30_840, 33_410]), Colors::RGB16([35_980, 38_550, 41_120])));
     }
 
     #[test]
     fn conversions_rgba16_to_rgba16() {
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        let image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
-
-        let mut image = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image.save_background();
-        let mut image2 = Image::new(100, 100, Colors::RGBA16([28_270, 30_840, 33_410, 65_535]));
-        image2.set((0, 0), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])).unwrap();
-        image2.save_background();
-
-        image.convert(ImageType::RGBA16);
-
-        assert_eq!(image, image2);
-        assert_eq!(image.image_type, ImageType::RGBA16);
+        conversion_test((Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])), (Colors::RGBA16([28_270, 30_840, 33_410, 65_535]), Colors::RGBA16([35_980, 38_550, 41_120, 65_535])));
     }
 
     #[test]
