@@ -10,12 +10,14 @@ license = "MIT"
 keywords = ["drawing", "graphics", "rendering", "images"]
 categories = ["graphics", "rendering"]
 
+[profile.release]
+lto = true
+
+[profile.test]
+opt-level = 3
 
 [dependencies]
-image_io = { version = "0.24.7", package="image", optional = true }
-
-[features]
-file_io = ["dep:image_io"]
+image = { version = "0.25.1", optional = true }
 
 [package.metadata.docs.rs]
 all-features = true

@@ -27,9 +27,17 @@
 //! **Shapes:** line, rectangle, ellipse, circle
 //!
 //! **Colorspaces:** RGB8
-//! Coordinates origin is at the bottom left corner of the image.
+//! Coordinates origin is in the bottom left corner of the image.
 
+pub mod conversions;
+pub mod error;
 pub mod image;
+
+#[doc(inline)]
+pub use conversions::*;
+
+#[doc(inline)]
+pub use error::*;
 
 #[doc(inline)]
 pub use image::*;
