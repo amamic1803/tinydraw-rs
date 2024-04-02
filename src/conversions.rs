@@ -1485,7 +1485,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray8_to_gray8() {
+    fn gray8_to_gray8() {
         conversion_test(
             (Colors::GRAY8(120), Colors::GRAY8(140)),
             (Colors::GRAY8(120), Colors::GRAY8(140)),
@@ -1493,7 +1493,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray8_to_graya8() {
+    fn gray8_to_graya8() {
         conversion_test(
             (Colors::GRAY8(120), Colors::GRAY8(140)),
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
@@ -1501,7 +1501,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray8_to_gray16() {
+    fn gray8_to_gray16() {
         conversion_test(
             (Colors::GRAY8(120), Colors::GRAY8(140)),
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
@@ -1509,7 +1509,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray8_to_graya16() {
+    fn gray8_to_graya16() {
         conversion_test(
             (Colors::GRAY8(120), Colors::GRAY8(140)),
             (
@@ -1520,7 +1520,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray8_to_rgb8() {
+    fn gray8_to_rgb8() {
         conversion_test(
             (Colors::GRAY8(120), Colors::GRAY8(140)),
             (Colors::RGB8([120, 120, 120]), Colors::RGB8([140, 140, 140])),
@@ -1528,7 +1528,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray8_to_rgba8() {
+    fn gray8_to_rgba8() {
         conversion_test(
             (Colors::GRAY8(120), Colors::GRAY8(140)),
             (
@@ -1539,7 +1539,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray8_to_rgb16() {
+    fn gray8_to_rgb16() {
         conversion_test(
             (Colors::GRAY8(120), Colors::GRAY8(140)),
             (
@@ -1550,7 +1550,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray8_to_rgba16() {
+    fn gray8_to_rgba16() {
         conversion_test(
             (Colors::GRAY8(120), Colors::GRAY8(140)),
             (
@@ -1561,7 +1561,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya8_to_gray8() {
+    fn graya8_to_gray8() {
         conversion_test(
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
             (Colors::GRAY8(120), Colors::GRAY8(140)),
@@ -1569,7 +1569,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya8_to_graya8() {
+    fn graya8_to_graya8() {
         conversion_test(
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
@@ -1577,7 +1577,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya8_to_gray16() {
+    fn graya8_to_gray16() {
         conversion_test(
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
@@ -1585,7 +1585,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya8_to_graya16() {
+    fn graya8_to_graya16() {
         conversion_test(
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
             (
@@ -1596,7 +1596,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya8_to_rgb8() {
+    fn graya8_to_rgb8() {
         conversion_test(
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
             (Colors::RGB8([120, 120, 120]), Colors::RGB8([140, 140, 140])),
@@ -1604,7 +1604,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya8_to_rgba8() {
+    fn graya8_to_rgba8() {
         conversion_test(
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
             (
@@ -1615,7 +1615,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya8_to_rgb16() {
+    fn graya8_to_rgb16() {
         conversion_test(
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
             (
@@ -1626,7 +1626,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya8_to_rgba16() {
+    fn graya8_to_rgba16() {
         conversion_test(
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
             (
@@ -1637,7 +1637,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray16_to_gray8() {
+    fn gray16_to_gray8() {
         conversion_test(
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
             (Colors::GRAY8(120), Colors::GRAY8(140)),
@@ -1645,7 +1645,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray16_to_graya8() {
+    fn gray16_to_graya8() {
         conversion_test(
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([140, 255])),
@@ -1653,7 +1653,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray16_to_gray16() {
+    fn gray16_to_gray16() {
         conversion_test(
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
@@ -1661,7 +1661,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray16_to_graya16() {
+    fn gray16_to_graya16() {
         conversion_test(
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
             (
@@ -1672,7 +1672,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray16_to_rgb8() {
+    fn gray16_to_rgb8() {
         conversion_test(
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
             (Colors::RGB8([120, 120, 120]), Colors::RGB8([140, 140, 140])),
@@ -1680,7 +1680,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray16_to_rgba8() {
+    fn gray16_to_rgba8() {
         conversion_test(
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
             (
@@ -1691,7 +1691,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray16_to_rgb16() {
+    fn gray16_to_rgb16() {
         conversion_test(
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
             (
@@ -1702,7 +1702,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_gray16_to_rgba16() {
+    fn gray16_to_rgba16() {
         conversion_test(
             (Colors::GRAY16(30_840), Colors::GRAY16(35_980)),
             (
@@ -1713,7 +1713,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya16_to_gray8() {
+    fn graya16_to_gray8() {
         conversion_test(
             (
                 Colors::GRAYA16([30_840, 65_535]),
@@ -1724,7 +1724,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya16_to_graya8() {
+    fn graya16_to_graya8() {
         conversion_test(
             (
                 Colors::GRAYA16([30_840, 65_535]),
@@ -1735,7 +1735,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya16_to_gray16() {
+    fn graya16_to_gray16() {
         conversion_test(
             (
                 Colors::GRAYA16([30_840, 65_535]),
@@ -1746,7 +1746,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya16_to_graya16() {
+    fn graya16_to_graya16() {
         conversion_test(
             (
                 Colors::GRAYA16([30_840, 65_535]),
@@ -1760,7 +1760,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya16_to_rgb8() {
+    fn graya16_to_rgb8() {
         conversion_test(
             (
                 Colors::GRAYA16([30_840, 65_535]),
@@ -1771,7 +1771,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya16_to_rgba8() {
+    fn graya16_to_rgba8() {
         conversion_test(
             (
                 Colors::GRAYA16([30_840, 65_535]),
@@ -1785,7 +1785,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya16_to_rgb16() {
+    fn graya16_to_rgb16() {
         conversion_test(
             (
                 Colors::GRAYA16([30_840, 65_535]),
@@ -1799,7 +1799,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_graya16_to_rgba16() {
+    fn graya16_to_rgba16() {
         conversion_test(
             (
                 Colors::GRAYA16([30_840, 65_535]),
@@ -1813,7 +1813,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb8_to_gray8() {
+    fn rgb8_to_gray8() {
         conversion_test(
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
             (Colors::GRAY8(120), Colors::GRAY8(150)),
@@ -1821,7 +1821,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb8_to_graya8() {
+    fn rgb8_to_graya8() {
         conversion_test(
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
             (Colors::GRAYA8([120, 255]), Colors::GRAYA8([150, 255])),
@@ -1829,7 +1829,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb8_to_gray16() {
+    fn rgb8_to_gray16() {
         conversion_test(
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
             (Colors::GRAY16(30_840), Colors::GRAY16(38_550)),
@@ -1837,7 +1837,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb8_to_graya16() {
+    fn rgb8_to_graya16() {
         conversion_test(
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
             (
@@ -1848,7 +1848,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb8_to_rgb8() {
+    fn rgb8_to_rgb8() {
         conversion_test(
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
@@ -1856,7 +1856,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb8_to_rgba8() {
+    fn rgb8_to_rgba8() {
         conversion_test(
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
             (
@@ -1867,7 +1867,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb8_to_rgb16() {
+    fn rgb8_to_rgb16() {
         conversion_test(
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
             (
@@ -1878,7 +1878,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb8_to_rgba16() {
+    fn rgb8_to_rgba16() {
         conversion_test(
             (Colors::RGB8([110, 120, 130]), Colors::RGB8([140, 150, 160])),
             (
@@ -1889,7 +1889,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba8_to_gray8() {
+    fn rgba8_to_gray8() {
         conversion_test(
             (
                 Colors::RGBA8([110, 120, 130, 140]),
@@ -1900,7 +1900,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba8_to_graya8() {
+    fn rgba8_to_graya8() {
         conversion_test(
             (
                 Colors::RGBA8([110, 120, 130, 140]),
@@ -1911,7 +1911,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba8_to_gray16() {
+    fn rgba8_to_gray16() {
         conversion_test(
             (
                 Colors::RGBA8([110, 120, 130, 140]),
@@ -1922,7 +1922,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba8_to_graya16() {
+    fn rgba8_to_graya16() {
         conversion_test(
             (
                 Colors::RGBA8([110, 120, 130, 140]),
@@ -1936,7 +1936,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba8_to_rgb8() {
+    fn rgba8_to_rgb8() {
         conversion_test(
             (
                 Colors::RGBA8([110, 120, 130, 140]),
@@ -1947,7 +1947,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba8_to_rgba8() {
+    fn rgba8_to_rgba8() {
         conversion_test(
             (
                 Colors::RGBA8([110, 120, 130, 140]),
@@ -1961,7 +1961,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba8_to_rgb16() {
+    fn rgba8_to_rgb16() {
         conversion_test(
             (
                 Colors::RGBA8([110, 120, 130, 140]),
@@ -1975,7 +1975,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba8_to_rgba16() {
+    fn rgba8_to_rgba16() {
         conversion_test(
             (
                 Colors::RGBA8([110, 120, 130, 140]),
@@ -1989,7 +1989,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb16_to_gray8() {
+    fn rgb16_to_gray8() {
         conversion_test(
             (
                 Colors::RGB16([28_270, 30_840, 33_410]),
@@ -2000,7 +2000,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb16_to_graya8() {
+    fn rgb16_to_graya8() {
         conversion_test(
             (
                 Colors::RGB16([28_270, 30_840, 33_410]),
@@ -2011,7 +2011,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb16_to_gray16() {
+    fn rgb16_to_gray16() {
         conversion_test(
             (
                 Colors::RGB16([28_270, 30_840, 33_410]),
@@ -2022,7 +2022,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb16_to_graya16() {
+    fn rgb16_to_graya16() {
         conversion_test(
             (
                 Colors::RGB16([28_270, 30_840, 33_410]),
@@ -2036,7 +2036,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb16_to_rgb8() {
+    fn rgb16_to_rgb8() {
         conversion_test(
             (
                 Colors::RGB16([28_270, 30_840, 33_410]),
@@ -2047,7 +2047,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb16_to_rgba8() {
+    fn rgb16_to_rgba8() {
         conversion_test(
             (
                 Colors::RGB16([28_270, 30_840, 33_410]),
@@ -2061,7 +2061,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb16_to_rgb16() {
+    fn rgb16_to_rgb16() {
         conversion_test(
             (
                 Colors::RGB16([28_270, 30_840, 33_410]),
@@ -2075,7 +2075,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgb16_to_rgba16() {
+    fn rgb16_to_rgba16() {
         conversion_test(
             (
                 Colors::RGB16([28_270, 30_840, 33_410]),
@@ -2089,7 +2089,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba16_to_gray8() {
+    fn rgba16_to_gray8() {
         conversion_test(
             (
                 Colors::RGBA16([28_270, 30_840, 33_410, 65_535]),
@@ -2100,7 +2100,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba16_to_graya8() {
+    fn rgba16_to_graya8() {
         conversion_test(
             (
                 Colors::RGBA16([28_270, 30_840, 33_410, 65_535]),
@@ -2111,7 +2111,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba16_to_gray16() {
+    fn rgba16_to_gray16() {
         conversion_test(
             (
                 Colors::RGBA16([28_270, 30_840, 33_410, 65_535]),
@@ -2122,7 +2122,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba16_to_graya16() {
+    fn rgba16_to_graya16() {
         conversion_test(
             (
                 Colors::RGBA16([28_270, 30_840, 33_410, 65_535]),
@@ -2136,7 +2136,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba16_to_rgb8() {
+    fn rgba16_to_rgb8() {
         conversion_test(
             (
                 Colors::RGBA16([28_270, 30_840, 33_410, 65_535]),
@@ -2147,7 +2147,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba16_to_rgba8() {
+    fn rgba16_to_rgba8() {
         conversion_test(
             (
                 Colors::RGBA16([28_270, 30_840, 33_410, 65_535]),
@@ -2161,7 +2161,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba16_to_rgb16() {
+    fn rgba16_to_rgb16() {
         conversion_test(
             (
                 Colors::RGBA16([28_270, 30_840, 33_410, 65_535]),
@@ -2175,7 +2175,7 @@ mod tests {
     }
 
     #[test]
-    fn conversions_rgba16_to_rgba16() {
+    fn rgba16_to_rgba16() {
         conversion_test(
             (
                 Colors::RGBA16([28_270, 30_840, 33_410, 65_535]),
