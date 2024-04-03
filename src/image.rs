@@ -1,13 +1,13 @@
 //! A module that contains the [Image] struct and related functions.
 
 // standard library imports
+use crate::colors::{Color, ColorType};
 use crate::error::Error;
 use std::{
     cmp::{max, min},
     f64::consts::FRAC_1_SQRT_2,
     fmt::Display,
     ops::{Bound, RangeBounds},
-    slice,
 };
 
 // standard library imports when image feature is enabled
@@ -16,7 +16,7 @@ use std::{fs::remove_file, path::Path};
 
 // external library imports when image feature is enabled
 #[cfg(feature = "image")]
-use image::{io::Reader as ImageReader, save_buffer, ColorType, DynamicImage};
+use image::{io::Reader as ImageReader, save_buffer, ColorType as ImageColorType, DynamicImage};
 
 /// A struct that holds an image
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -28,7 +28,7 @@ pub struct Image {
     /// The height of the image
     pub(crate) height: usize,
     /// The type of the image
-    pub(crate) image_type: ImageType,
+    pub(crate) image_type: ColorType,
     /// The background of the image
     pub(crate) background_data: BackgroundData,
 }
@@ -49,148 +49,9 @@ impl Display for Image {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub(crate) enum BackgroundData {
     /// The background is a color
-    Color(Colors),
+    Color(Color),
     /// The background is an image
     Image(Vec<u8>),
-}
-
-/// An enum that holds the color information
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum Colors {
-    /// The 8-bit grayscale color
-    GRAY8(u8),
-    /// The 8-bit grayscale color + 8-bit alpha channel
-    GRAYA8([u8; 2]),
-    /// The 16-bit grayscale color
-    GRAY16(u16),
-    /// The 16-bit grayscale color + 16-bit alpha channel
-    GRAYA16([u16; 2]),
-    /// The 8-bit RGB color
-    RGB8([u8; 3]),
-    /// The 8-bit RGB color + 8-bit alpha channel
-    RGBA8([u8; 4]),
-    /// The 16-bit RGB color
-    RGB16([u16; 3]),
-    /// The 16-bit RGB color + 16-bit alpha channel
-    RGBA16([u16; 4]),
-}
-impl Display for Colors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Colors::GRAY8(value) => write!(f, "GRAY8({:?})", value),
-            Colors::GRAYA8(value) => write!(f, "GRAYA8({:?})", value),
-            Colors::GRAY16(value) => write!(f, "GRAY16({:?})", value),
-            Colors::GRAYA16(value) => write!(f, "GRAYA16({:?})", value),
-            Colors::RGB8(value) => write!(f, "RGB8({:?})", value),
-            Colors::RGBA8(value) => write!(f, "RGBA8({:?})", value),
-            Colors::RGB16(value) => write!(f, "RGB16({:?})", value),
-            Colors::RGBA16(value) => write!(f, "RGBA16({:?})", value),
-        }
-    }
-}
-impl Colors {
-    /// Returns the bytes of the color
-    fn as_slice(&self) -> &[u8] {
-        match self {
-            Colors::GRAY8(color) => slice::from_ref(color),
-            Colors::GRAYA8(color) => color as &[u8],
-            Colors::GRAY16(color) => unsafe {
-                // TODO: maybe not safe, assumes big endian
-                slice::from_raw_parts(color as *const u16 as *const u8, 2)
-            },
-            Colors::GRAYA16(color) => unsafe {
-                slice::from_raw_parts(color.as_ptr() as *const u8, 4)
-            },
-            Colors::RGB8(color) => color as &[u8],
-            Colors::RGBA8(color) => color as &[u8],
-            Colors::RGB16(color) => unsafe {
-                slice::from_raw_parts(color.as_ptr() as *const u8, 6)
-            },
-            Colors::RGBA16(color) => unsafe {
-                slice::from_raw_parts(color.as_ptr() as *const u8, 8)
-            },
-        }
-    }
-}
-
-/// An enum that holds the image type information
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum ImageType {
-    /// An image with 8-bit grayscale pixels
-    GRAY8,
-    /// An image with 8-bit grayscale pixels + 8-bit alpha channel
-    GRAYA8,
-    /// An image with 16-bit grayscale pixels
-    GRAY16,
-    /// An image with 16-bit grayscale pixels + 16-bit alpha channel
-    GRAYA16,
-    /// An image with 8-bit RGB pixels
-    RGB8,
-    /// An image with 8-bit RGB pixels + 8-bit alpha channel
-    RGBA8,
-    /// An image with 16-bit RGB pixels
-    RGB16,
-    /// An image with 16-bit RGB pixels + 16-bit alpha channel
-    RGBA16,
-}
-impl Display for ImageType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ImageType::GRAY8 => write!(f, "GRAY8"),
-            ImageType::GRAYA8 => write!(f, "GRAYA8"),
-            ImageType::GRAY16 => write!(f, "GRAY16"),
-            ImageType::GRAYA16 => write!(f, "GRAYA16"),
-            ImageType::RGB8 => write!(f, "RGB8"),
-            ImageType::RGBA8 => write!(f, "RGBA8"),
-            ImageType::RGB16 => write!(f, "RGB16"),
-            ImageType::RGBA16 => write!(f, "RGBA16"),
-        }
-    }
-}
-impl ImageType {
-    /// Returns the number of bytes per pixel
-    #[inline]
-    fn bytes_per_pixel(&self) -> usize {
-        match self {
-            ImageType::GRAY8 => 1,
-            ImageType::GRAYA8 => 2,
-            ImageType::GRAY16 => 2,
-            ImageType::GRAYA16 => 4,
-            ImageType::RGB8 => 3,
-            ImageType::RGBA8 => 4,
-            ImageType::RGB16 => 6,
-            ImageType::RGBA16 => 8,
-        }
-    }
-}
-impl From<Colors> for ImageType {
-    fn from(color: Colors) -> Self {
-        match color {
-            Colors::GRAY8(_) => ImageType::GRAY8,
-            Colors::GRAYA8(_) => ImageType::GRAYA8,
-            Colors::GRAY16(_) => ImageType::GRAY16,
-            Colors::GRAYA16(_) => ImageType::GRAYA16,
-            Colors::RGB8(_) => ImageType::RGB8,
-            Colors::RGBA8(_) => ImageType::RGBA8,
-            Colors::RGB16(_) => ImageType::RGB16,
-            Colors::RGBA16(_) => ImageType::RGBA16,
-        }
-    }
-}
-#[cfg(feature = "image")]
-impl From<ImageType> for ColorType {
-    fn from(color: ImageType) -> Self {
-        match color {
-            ImageType::GRAY8 => ColorType::L8,
-            ImageType::GRAYA8 => ColorType::La8,
-            ImageType::GRAY16 => ColorType::L16,
-            ImageType::GRAYA16 => ColorType::La16,
-            ImageType::RGB8 => ColorType::Rgb8,
-            ImageType::RGBA8 => ColorType::Rgba8,
-            ImageType::RGB16 => ColorType::Rgb16,
-            ImageType::RGBA16 => ColorType::Rgba16,
-        }
-    }
 }
 
 /// A trait for drawing on images.
@@ -202,14 +63,7 @@ pub trait Drawing {
     /// * ```color``` - The color of the circle.
     /// * ```thickness``` - The thickness of the circle. If the thickness is 0, the circle will be filled.
     /// * ```opacity``` - The opacity of the circle.
-    fn draw_circle(
-        &mut self,
-        center: (usize, usize),
-        radius: usize,
-        color: Colors,
-        thickness: usize,
-        opacity: f64,
-    ) -> Result<(), Error>;
+    fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Color, thickness: usize, opacity: f64) -> Result<(), Error>;
 
     /// Draws an ellipse on the image. If the ellipse is not fully contained in the image, it will be clipped.
     /// # Arguments
@@ -218,14 +72,7 @@ pub trait Drawing {
     /// * ```color``` - The color of the ellipse.
     /// * ```thickness``` - The thickness of the ellipse. If the thickness is 0, the ellipse will be filled.
     /// * ```opacity``` - The opacity of the ellipse.
-    fn draw_ellipse(
-        &mut self,
-        center: (usize, usize),
-        axes: (usize, usize),
-        color: Colors,
-        thickness: usize,
-        opacity: f64,
-    ) -> Result<(), Error>;
+    fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Color, thickness: usize, opacity: f64) -> Result<(), Error>;
 
     /// Draws a line on the image. If the line is not fully contained in the image, it will be clipped.
     /// # Arguments
@@ -234,14 +81,7 @@ pub trait Drawing {
     /// * ```color``` - The color of the line.
     /// * ```thickness``` - The thickness of the line.
     /// * ```opacity``` - The opacity of the line.
-    fn draw_line(
-        &mut self,
-        point1: (usize, usize),
-        point2: (usize, usize),
-        color: Colors,
-        thickness: usize,
-        opacity: f64,
-    ) -> Result<(), Error>;
+    fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Color, thickness: usize, opacity: f64) -> Result<(), Error>;
 
     /// Draws a rectangle on the image. If the rectangle is not fully contained in the image, it will be clipped.
     /// # Arguments
@@ -250,14 +90,7 @@ pub trait Drawing {
     /// * ```color``` - The color of the rectangle.
     /// * ```thickness``` - The thickness of the rectangle. If the thickness is 0, the rectangle will be filled.
     /// * ```opacity``` - The opacity of the rectangle.
-    fn draw_rectangle(
-        &mut self,
-        point1: (usize, usize),
-        point2: (usize, usize),
-        color: Colors,
-        thickness: usize,
-        opacity: f64,
-    ) -> Result<(), Error>;
+    fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Color, thickness: usize, opacity: f64) -> Result<(), Error>;
 }
 
 /// A trait for indexing into image data
@@ -281,14 +114,14 @@ pub trait Indexing {
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// # Returns
     /// * [Result] which holds the value of the pixel or [Err] with [Error].
-    fn get(&self, index: (usize, usize)) -> Result<Colors, Error>;
+    fn get(&self, index: (usize, usize)) -> Result<Color, Error>;
 
     /// Returns the value of the pixel at the given coordinates without performing checks.
     /// # Arguments
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// # Returns
     /// * The value of the pixel.
-    fn get_unchecked(&self, index: (usize, usize)) -> Colors;
+    fn get_unchecked(&self, index: (usize, usize)) -> Color;
 
     /// Sets the value of the pixel at the given coordinates.
     /// # Arguments
@@ -296,13 +129,13 @@ pub trait Indexing {
     /// * ```value``` - The value to set.
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [Error].
-    fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), Error>;
+    fn set(&mut self, index: (usize, usize), color: Color) -> Result<(), Error>;
 
     /// Sets the value of the pixel at the given coordinates without performing checks.
     /// # Arguments
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// * ```value``` - The value to set.
-    fn set_unchecked(&mut self, index: (usize, usize), color: Colors);
+    fn set_unchecked(&mut self, index: (usize, usize), color: Color);
 
     /// Sets the value of the pixel by blending it with the current value at the given coordinates.
     /// # Arguments
@@ -311,19 +144,14 @@ pub trait Indexing {
     /// * ```opacity``` - The opacity of the new value.
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [Error].
-    fn set_transparent(
-        &mut self,
-        index: (usize, usize),
-        color: Colors,
-        opacity: f64,
-    ) -> Result<(), Error>;
+    fn set_transparent(&mut self, index: (usize, usize), color: Color, opacity: f64) -> Result<(), Error>;
 
     /// Sets the value of the pixel by blending it with the current value at the given coordinates without performing checks.
     /// # Arguments
     /// * ```index``` - The tuple with the coordinates of the pixel (x, y).
     /// * ```value``` - The value to set.
     /// * ```opacity``` - The opacity of the new value.
-    fn set_transparent_unchecked(&mut self, index: (usize, usize), color: Colors, opacity: f64);
+    fn set_transparent_unchecked(&mut self, index: (usize, usize), color: Color, opacity: f64);
 
     /// Fills the given range in image with the given value.
     /// # Arguments
@@ -331,21 +159,13 @@ pub trait Indexing {
     /// * ```value``` - The value to fill with.
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [Error].
-    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(
-        &mut self,
-        index: (RX, RY),
-        color: Colors,
-    ) -> Result<(), Error>;
+    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color) -> Result<(), Error>;
 
     /// Fills the given range in image with the given value without performing checks.
     /// # Arguments
     /// * ```index``` - The tuple with the ranges of the image to fill.
     /// * ```value``` - The value to fill with.
-    fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(
-        &mut self,
-        index: (RX, RY),
-        color: Colors,
-    );
+    fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color);
 
     /// Fills the given range in image with the given value by blending it with the current value.
     /// # Arguments
@@ -354,24 +174,14 @@ pub trait Indexing {
     /// * ```opacity``` - The opacity of the new value.
     /// # Returns
     /// * [Result] which holds [Ok] or [Err] with [Error].
-    fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(
-        &mut self,
-        index: (RX, RY),
-        color: Colors,
-        opacity: f64,
-    ) -> Result<(), Error>;
+    fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color, opacity: f64) -> Result<(), Error>;
 
     /// Fills the given range in image with the given value by blending it with the current value without performing checks.
     /// # Arguments
     /// * ```index``` - The tuple with the ranges of the image to fill.
     /// * ```value``` - The value to fill with.
     /// * ```opacity``` - The opacity of the new value.
-    fn fill_transparent_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(
-        &mut self,
-        index: (RX, RY),
-        color: Colors,
-        opacity: f64,
-    );
+    fn fill_transparent_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color, opacity: f64);
 }
 
 /// A trait for image input/output
@@ -384,12 +194,7 @@ pub trait IO {
     /// * ```bytes``` - The bytes of the image.
     /// # Returns
     /// * [Result] which holds new [Image] or [Err] with [Error].
-    fn from_bytes(
-        width: usize,
-        height: usize,
-        image_type: ImageType,
-        bytes: &[u8],
-    ) -> Result<Image, Error>;
+    fn from_bytes(width: usize, height: usize, image_type: ColorType, bytes: &[u8]) -> Result<Image, Error>;
 
     /// Returns the bytes of the image as a vector.
     /// # Returns
@@ -446,13 +251,13 @@ pub trait Utilities {
     /// Returns the type of the image.
     /// # Returns
     /// * The type of the image.
-    fn image_type(&self) -> ImageType;
+    fn image_type(&self) -> ColorType;
 
     /// Deletes all drawings, restores image to match the saved background.
     fn clear(&mut self);
 
     /// Fills the whole image with the given value.
-    fn fill_image(&mut self, color: Colors) -> Result<(), Error>;
+    fn fill_image(&mut self, color: Color) -> Result<(), Error>;
 
     /// Saves the current state of the image as background.
     fn save_background(&mut self);
@@ -1549,7 +1354,7 @@ impl Image<[u8; 3]> {
 */
 
 impl Image {
-    pub fn new(width: usize, height: usize, background: Colors) -> Self {
+    pub fn new(width: usize, height: usize, background: Color) -> Self {
         let color_slice = background.as_slice();
         let mut data = vec![0; width * height * color_slice.len()];
         for x in 0..data.len() {
@@ -1560,56 +1365,28 @@ impl Image {
             data,
             width,
             height,
-            image_type: ImageType::from(background),
+            image_type: ColorType::from(background),
             background_data: BackgroundData::Color(background),
         }
     }
 }
 
 impl Drawing for Image {
-    fn draw_circle(
-        &mut self,
-        center: (usize, usize),
-        radius: usize,
-        color: Colors,
-        thickness: usize,
-        opacity: f64,
-    ) -> Result<(), Error> {
+    fn draw_circle(&mut self, center: (usize, usize), radius: usize, color: Color, thickness: usize, opacity: f64) -> Result<(), Error> {
         todo!()
     }
 
-    fn draw_ellipse(
-        &mut self,
-        center: (usize, usize),
-        axes: (usize, usize),
-        color: Colors,
-        thickness: usize,
-        opacity: f64,
-    ) -> Result<(), Error> {
+    fn draw_ellipse(&mut self, center: (usize, usize), axes: (usize, usize), color: Color, thickness: usize, opacity: f64) -> Result<(), Error> {
         todo!()
     }
 
-    fn draw_line(
-        &mut self,
-        point1: (usize, usize),
-        point2: (usize, usize),
-        color: Colors,
-        thickness: usize,
-        opacity: f64,
-    ) -> Result<(), Error> {
+    fn draw_line(&mut self, point1: (usize, usize), point2: (usize, usize), color: Color, thickness: usize, opacity: f64) -> Result<(), Error> {
         todo!()
     }
 
-    fn draw_rectangle(
-        &mut self,
-        point1: (usize, usize),
-        point2: (usize, usize),
-        color: Colors,
-        thickness: usize,
-        opacity: f64,
-    ) -> Result<(), Error> {
+    fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Color, thickness: usize, opacity: f64) -> Result<(), Error> {
         // check if color is valid for this image type
-        if ImageType::from(color) != self.image_type {
+        if ColorType::from(color) != self.image_type {
             return Err(Error::WrongColor);
         }
 
@@ -1642,17 +1419,10 @@ impl Drawing for Image {
 
             if opacity >= 1.0 {
                 // Draw filled, solid rectangle.
-                self.fill_unchecked(
-                    (smaller_x..(bigger_x + 1), smaller_y..(bigger_y + 1)),
-                    color,
-                );
+                self.fill_unchecked((smaller_x..(bigger_x + 1), smaller_y..(bigger_y + 1)), color);
             } else {
                 // Draw filled, transparent rectangle.
-                self.fill_transparent_unchecked(
-                    (smaller_x..(bigger_x + 1), smaller_y..(bigger_y + 1)),
-                    color,
-                    opacity,
-                );
+                self.fill_transparent_unchecked((smaller_x..(bigger_x + 1), smaller_y..(bigger_y + 1)), color, opacity);
             }
         } else {
             // new thickness variable, as it will be modified
@@ -1675,54 +1445,20 @@ impl Drawing for Image {
                         if bigger_y == smaller_y {
                             self.set_unchecked((smaller_x, smaller_y), color);
                         } else {
-                            self.fill_unchecked(
-                                (
-                                    smaller_x..(smaller_x + 1),
-                                    smaller_y..min(self.height, bigger_y + 1),
-                                ),
-                                color,
-                            );
+                            self.fill_unchecked((smaller_x..(smaller_x + 1), smaller_y..min(self.height, bigger_y + 1)), color);
                         }
                     } else if bigger_y == smaller_y {
-                        self.fill_unchecked(
-                            (
-                                smaller_x..min(self.width, bigger_x + 1),
-                                smaller_y..(smaller_y + 1),
-                            ),
-                            color,
-                        );
+                        self.fill_unchecked((smaller_x..min(self.width, bigger_x + 1), smaller_y..(smaller_y + 1)), color);
                     } else {
-                        self.fill_unchecked(
-                            (
-                                smaller_x..min(self.width, bigger_x + 1),
-                                smaller_y..(smaller_y + 1),
-                            ),
-                            color,
-                        ); // bottom
+                        self.fill_unchecked((smaller_x..min(self.width, bigger_x + 1), smaller_y..(smaller_y + 1)), color); // bottom
                         if bigger_y < self.height {
-                            self.fill_unchecked(
-                                (
-                                    smaller_x..min(self.width, bigger_x + 1),
-                                    bigger_y..(bigger_y + 1),
-                                ),
-                                color,
-                            ); // top
+                            self.fill_unchecked((smaller_x..min(self.width, bigger_x + 1), bigger_y..(bigger_y + 1)), color);
+                            // top
                         }
-                        self.fill_unchecked(
-                            (
-                                smaller_x..(smaller_x + 1),
-                                (smaller_y + 1)..min(bigger_y, self.height),
-                            ),
-                            color,
-                        ); // left
+                        self.fill_unchecked((smaller_x..(smaller_x + 1), (smaller_y + 1)..min(bigger_y, self.height)), color); // left
                         if bigger_x < self.width {
-                            self.fill_unchecked(
-                                (
-                                    bigger_x..(bigger_x + 1),
-                                    (smaller_y + 1)..min(bigger_y, self.height),
-                                ),
-                                color,
-                            ); // right
+                            self.fill_unchecked((bigger_x..(bigger_x + 1), (smaller_y + 1)..min(bigger_y, self.height)), color);
+                            // right
                         }
                     }
 
@@ -1741,60 +1477,20 @@ impl Drawing for Image {
                         if bigger_y == smaller_y {
                             self.set_transparent_unchecked((smaller_x, smaller_y), color, opacity);
                         } else {
-                            self.fill_transparent_unchecked(
-                                (
-                                    smaller_x..(smaller_x + 1),
-                                    smaller_y..min(self.height, bigger_y + 1),
-                                ),
-                                color,
-                                opacity,
-                            );
+                            self.fill_transparent_unchecked((smaller_x..(smaller_x + 1), smaller_y..min(self.height, bigger_y + 1)), color, opacity);
                         }
                     } else if bigger_y == smaller_y {
-                        self.fill_transparent_unchecked(
-                            (
-                                smaller_x..min(self.width, bigger_x + 1),
-                                smaller_y..(smaller_y + 1),
-                            ),
-                            color,
-                            opacity,
-                        );
+                        self.fill_transparent_unchecked((smaller_x..min(self.width, bigger_x + 1), smaller_y..(smaller_y + 1)), color, opacity);
                     } else {
-                        self.fill_transparent_unchecked(
-                            (
-                                smaller_x..min(self.width, bigger_x + 1),
-                                smaller_y..(smaller_y + 1),
-                            ),
-                            color,
-                            opacity,
-                        ); // bottom
+                        self.fill_transparent_unchecked((smaller_x..min(self.width, bigger_x + 1), smaller_y..(smaller_y + 1)), color, opacity); // bottom
                         if bigger_y < self.height {
-                            self.fill_transparent_unchecked(
-                                (
-                                    smaller_x..min(self.width, bigger_x + 1),
-                                    bigger_y..(bigger_y + 1),
-                                ),
-                                color,
-                                opacity,
-                            ); // top
+                            self.fill_transparent_unchecked((smaller_x..min(self.width, bigger_x + 1), bigger_y..(bigger_y + 1)), color, opacity);
+                            // top
                         }
-                        self.fill_transparent_unchecked(
-                            (
-                                smaller_x..(smaller_x + 1),
-                                (smaller_y + 1)..min(bigger_y, self.height),
-                            ),
-                            color,
-                            opacity,
-                        ); // left
+                        self.fill_transparent_unchecked((smaller_x..(smaller_x + 1), (smaller_y + 1)..min(bigger_y, self.height)), color, opacity); // left
                         if bigger_x < self.width {
-                            self.fill_transparent_unchecked(
-                                (
-                                    bigger_x..(bigger_x + 1),
-                                    (smaller_y + 1)..min(bigger_y, self.height),
-                                ),
-                                color,
-                                opacity,
-                            ); // right
+                            self.fill_transparent_unchecked((bigger_x..(bigger_x + 1), (smaller_y + 1)..min(bigger_y, self.height)), color, opacity);
+                            // right
                         }
                     }
 
@@ -1827,7 +1523,7 @@ impl Indexing for Image {
         ((self.height - index.1 - 1) * self.width + index.0) * self.image_type.bytes_per_pixel()
     }
 
-    fn get(&self, index: (usize, usize)) -> Result<Colors, Error> {
+    fn get(&self, index: (usize, usize)) -> Result<Color, Error> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(Error::OutOfBounds)
         } else {
@@ -1835,35 +1531,24 @@ impl Indexing for Image {
         }
     }
 
-    fn get_unchecked(&self, index: (usize, usize)) -> Colors {
+    fn get_unchecked(&self, index: (usize, usize)) -> Color {
         let index_temp: usize = self.index_unchecked(index);
         match self.image_type {
-            ImageType::GRAY8 => Colors::GRAY8(self.data[index_temp]),
-            ImageType::GRAYA8 => Colors::GRAYA8([self.data[index_temp], self.data[index_temp + 1]]),
-            ImageType::GRAY16 => Colors::GRAY16(
-                ((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16),
-            ),
-            ImageType::GRAYA16 => Colors::GRAYA16([
+            ColorType::GRAY8 => Color::GRAY8(self.data[index_temp]),
+            ColorType::GRAYA8 => Color::GRAYA8([self.data[index_temp], self.data[index_temp + 1]]),
+            ColorType::GRAY16 => Color::GRAY16(((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16)),
+            ColorType::GRAYA16 => Color::GRAYA16([
                 ((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16),
                 ((self.data[index_temp + 2] as u16) << 8) | (self.data[index_temp + 3] as u16),
             ]),
-            ImageType::RGB8 => Colors::RGB8([
-                self.data[index_temp],
-                self.data[index_temp + 1],
-                self.data[index_temp + 2],
-            ]),
-            ImageType::RGBA8 => Colors::RGBA8([
-                self.data[index_temp],
-                self.data[index_temp + 1],
-                self.data[index_temp + 2],
-                self.data[index_temp + 3],
-            ]),
-            ImageType::RGB16 => Colors::RGB16([
+            ColorType::RGB8 => Color::RGB8([self.data[index_temp], self.data[index_temp + 1], self.data[index_temp + 2]]),
+            ColorType::RGBA8 => Color::RGBA8([self.data[index_temp], self.data[index_temp + 1], self.data[index_temp + 2], self.data[index_temp + 3]]),
+            ColorType::RGB16 => Color::RGB16([
                 ((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16),
                 ((self.data[index_temp + 2] as u16) << 8) | (self.data[index_temp + 3] as u16),
                 ((self.data[index_temp + 4] as u16) << 8) | (self.data[index_temp + 5] as u16),
             ]),
-            ImageType::RGBA16 => Colors::RGBA16([
+            ColorType::RGBA16 => Color::RGBA16([
                 ((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16),
                 ((self.data[index_temp + 2] as u16) << 8) | (self.data[index_temp + 3] as u16),
                 ((self.data[index_temp + 4] as u16) << 8) | (self.data[index_temp + 5] as u16),
@@ -1872,10 +1557,10 @@ impl Indexing for Image {
         }
     }
 
-    fn set(&mut self, index: (usize, usize), color: Colors) -> Result<(), Error> {
+    fn set(&mut self, index: (usize, usize), color: Color) -> Result<(), Error> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(Error::OutOfBounds)
-        } else if ImageType::from(color) != self.image_type {
+        } else if ColorType::from(color) != self.image_type {
             Err(Error::WrongColor)
         } else {
             self.set_unchecked(index, color);
@@ -1883,39 +1568,39 @@ impl Indexing for Image {
         }
     }
 
-    fn set_unchecked(&mut self, index: (usize, usize), color: Colors) {
+    fn set_unchecked(&mut self, index: (usize, usize), color: Color) {
         let index_temp: usize = self.index_unchecked(index);
 
         match color {
-            Colors::GRAY8(val) => {
+            Color::GRAY8(val) => {
                 self.data[index_temp] = val;
             }
-            Colors::GRAYA8(val) => {
+            Color::GRAYA8(val) => {
                 self.data[index_temp] = val[0];
                 self.data[index_temp + 1] = val[1];
             }
-            Colors::GRAY16(val) => {
+            Color::GRAY16(val) => {
                 self.data[index_temp] = (val >> 8) as u8;
                 self.data[index_temp + 1] = val as u8;
             }
-            Colors::GRAYA16(val) => {
+            Color::GRAYA16(val) => {
                 self.data[index_temp] = (val[0] >> 8) as u8;
                 self.data[index_temp + 1] = val[0] as u8;
                 self.data[index_temp + 2] = (val[1] >> 8) as u8;
                 self.data[index_temp + 3] = val[1] as u8;
             }
-            Colors::RGB8(val) => {
+            Color::RGB8(val) => {
                 self.data[index_temp] = val[0];
                 self.data[index_temp + 1] = val[1];
                 self.data[index_temp + 2] = val[2];
             }
-            Colors::RGBA8(val) => {
+            Color::RGBA8(val) => {
                 self.data[index_temp] = val[0];
                 self.data[index_temp + 1] = val[1];
                 self.data[index_temp + 2] = val[2];
                 self.data[index_temp + 3] = val[3];
             }
-            Colors::RGB16(val) => {
+            Color::RGB16(val) => {
                 self.data[index_temp] = (val[0] >> 8) as u8;
                 self.data[index_temp + 1] = val[0] as u8;
                 self.data[index_temp + 2] = (val[1] >> 8) as u8;
@@ -1923,7 +1608,7 @@ impl Indexing for Image {
                 self.data[index_temp + 4] = (val[2] >> 8) as u8;
                 self.data[index_temp + 5] = val[2] as u8;
             }
-            Colors::RGBA16(val) => {
+            Color::RGBA16(val) => {
                 self.data[index_temp] = (val[0] >> 8) as u8;
                 self.data[index_temp + 1] = val[0] as u8;
                 self.data[index_temp + 2] = (val[1] >> 8) as u8;
@@ -1936,15 +1621,10 @@ impl Indexing for Image {
         }
     }
 
-    fn set_transparent(
-        &mut self,
-        index: (usize, usize),
-        color: Colors,
-        opacity: f64,
-    ) -> Result<(), Error> {
+    fn set_transparent(&mut self, index: (usize, usize), color: Color, opacity: f64) -> Result<(), Error> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(Error::OutOfBounds)
-        } else if ImageType::from(color) != self.image_type {
+        } else if ColorType::from(color) != self.image_type {
             Err(Error::WrongColor)
         } else if opacity.is_nan() {
             Err(Error::InvalidOpacity)
@@ -1961,7 +1641,7 @@ impl Indexing for Image {
         }
     }
 
-    fn set_transparent_unchecked(&mut self, index: (usize, usize), color: Colors, opacity: f64) {
+    fn set_transparent_unchecked(&mut self, index: (usize, usize), color: Color, opacity: f64) {
         if opacity == 1.0 {
             self.set_unchecked(index, color);
             return;
@@ -1974,134 +1654,70 @@ impl Indexing for Image {
         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
 
         match color {
-            Colors::GRAY8(val) => {
-                self.data[index_temp] = (self.data[index_temp] as f64 * (1.0 - opacity)
-                    + val as f64 * opacity)
-                    .round() as u8;
+            Color::GRAY8(val) => {
+                self.data[index_temp] = (self.data[index_temp] as f64 * (1.0 - opacity) + val as f64 * opacity).round() as u8;
             }
-            Colors::GRAYA8(val) => {
-                self.data[index_temp] = (self.data[index_temp] as f64 * (1.0 - opacity)
-                    + val[0] as f64 * opacity)
-                    .round() as u8;
-                self.data[index_temp + 1] = (self.data[index_temp + 1] as f64 * (1.0 - opacity)
-                    + val[1] as f64 * opacity)
-                    .round() as u8;
+            Color::GRAYA8(val) => {
+                self.data[index_temp] = (self.data[index_temp] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                self.data[index_temp + 1] = (self.data[index_temp + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
             }
-            Colors::GRAY16(val) => {
-                let new_val: u16 = ((((self.data[index_temp] as u16) << 8)
-                    | (self.data[index_temp + 1] as u16))
-                    as f64
-                    * (1.0 - opacity)
-                    + val as f64 * opacity)
-                    .round() as u16;
+            Color::GRAY16(val) => {
+                let new_val: u16 =
+                    ((((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16)) as f64 * (1.0 - opacity) + val as f64 * opacity).round() as u16;
                 self.data[index_temp] = (new_val >> 8) as u8;
                 self.data[index_temp + 1] = new_val as u8;
             }
-            Colors::GRAYA16(val) => {
-                let mut new_val: u16 = ((((self.data[index_temp] as u16) << 8)
-                    | (self.data[index_temp + 1] as u16))
-                    as f64
-                    * (1.0 - opacity)
-                    + val[0] as f64 * opacity)
-                    .round() as u16;
+            Color::GRAYA16(val) => {
+                let mut new_val: u16 =
+                    ((((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                 self.data[index_temp] = (new_val >> 8) as u8;
                 self.data[index_temp + 1] = new_val as u8;
-                new_val = ((((self.data[index_temp + 2] as u16) << 8)
-                    | (self.data[index_temp + 3] as u16)) as f64
-                    * (1.0 - opacity)
-                    + val[1] as f64 * opacity)
-                    .round() as u16;
+                new_val = ((((self.data[index_temp + 2] as u16) << 8) | (self.data[index_temp + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                 self.data[index_temp + 2] = (new_val >> 8) as u8;
                 self.data[index_temp + 3] = new_val as u8;
             }
-            Colors::RGB8(val) => {
-                self.data[index_temp] = (self.data[index_temp] as f64 * (1.0 - opacity)
-                    + val[0] as f64 * opacity)
-                    .round() as u8;
-                self.data[index_temp + 1] = (self.data[index_temp + 1] as f64 * (1.0 - opacity)
-                    + val[1] as f64 * opacity)
-                    .round() as u8;
-                self.data[index_temp + 2] = (self.data[index_temp + 2] as f64 * (1.0 - opacity)
-                    + val[2] as f64 * opacity)
-                    .round() as u8;
+            Color::RGB8(val) => {
+                self.data[index_temp] = (self.data[index_temp] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                self.data[index_temp + 1] = (self.data[index_temp + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
+                self.data[index_temp + 2] = (self.data[index_temp + 2] as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u8;
             }
-            Colors::RGBA8(val) => {
-                self.data[index_temp] = (self.data[index_temp] as f64 * (1.0 - opacity)
-                    + val[0] as f64 * opacity)
-                    .round() as u8;
-                self.data[index_temp + 1] = (self.data[index_temp + 1] as f64 * (1.0 - opacity)
-                    + val[1] as f64 * opacity)
-                    .round() as u8;
-                self.data[index_temp + 2] = (self.data[index_temp + 2] as f64 * (1.0 - opacity)
-                    + val[2] as f64 * opacity)
-                    .round() as u8;
-                self.data[index_temp + 3] = (self.data[index_temp + 3] as f64 * (1.0 - opacity)
-                    + val[3] as f64 * opacity)
-                    .round() as u8;
+            Color::RGBA8(val) => {
+                self.data[index_temp] = (self.data[index_temp] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                self.data[index_temp + 1] = (self.data[index_temp + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
+                self.data[index_temp + 2] = (self.data[index_temp + 2] as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u8;
+                self.data[index_temp + 3] = (self.data[index_temp + 3] as f64 * (1.0 - opacity) + val[3] as f64 * opacity).round() as u8;
             }
-            Colors::RGB16(val) => {
-                let mut new_val: u16 = ((((self.data[index_temp] as u16) << 8)
-                    | (self.data[index_temp + 1] as u16))
-                    as f64
-                    * (1.0 - opacity)
-                    + val[0] as f64 * opacity)
-                    .round() as u16;
+            Color::RGB16(val) => {
+                let mut new_val: u16 =
+                    ((((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                 self.data[index_temp] = (new_val >> 8) as u8;
                 self.data[index_temp + 1] = new_val as u8;
-                new_val = ((((self.data[index_temp + 2] as u16) << 8)
-                    | (self.data[index_temp + 3] as u16)) as f64
-                    * (1.0 - opacity)
-                    + val[1] as f64 * opacity)
-                    .round() as u16;
+                new_val = ((((self.data[index_temp + 2] as u16) << 8) | (self.data[index_temp + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                 self.data[index_temp + 2] = (new_val >> 8) as u8;
                 self.data[index_temp + 3] = new_val as u8;
-                new_val = ((((self.data[index_temp + 4] as u16) << 8)
-                    | (self.data[index_temp + 5] as u16)) as f64
-                    * (1.0 - opacity)
-                    + val[2] as f64 * opacity)
-                    .round() as u16;
+                new_val = ((((self.data[index_temp + 4] as u16) << 8) | (self.data[index_temp + 5] as u16)) as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u16;
                 self.data[index_temp + 4] = (new_val >> 8) as u8;
                 self.data[index_temp + 5] = new_val as u8;
             }
-            Colors::RGBA16(val) => {
-                let mut new_val: u16 = ((((self.data[index_temp] as u16) << 8)
-                    | (self.data[index_temp + 1] as u16))
-                    as f64
-                    * (1.0 - opacity)
-                    + val[0] as f64 * opacity)
-                    .round() as u16;
+            Color::RGBA16(val) => {
+                let mut new_val: u16 =
+                    ((((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                 self.data[index_temp] = (new_val >> 8) as u8;
                 self.data[index_temp + 1] = new_val as u8;
-                new_val = ((((self.data[index_temp + 2] as u16) << 8)
-                    | (self.data[index_temp + 3] as u16)) as f64
-                    * (1.0 - opacity)
-                    + val[1] as f64 * opacity)
-                    .round() as u16;
+                new_val = ((((self.data[index_temp + 2] as u16) << 8) | (self.data[index_temp + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                 self.data[index_temp + 2] = (new_val >> 8) as u8;
                 self.data[index_temp + 3] = new_val as u8;
-                new_val = ((((self.data[index_temp + 4] as u16) << 8)
-                    | (self.data[index_temp + 5] as u16)) as f64
-                    * (1.0 - opacity)
-                    + val[2] as f64 * opacity)
-                    .round() as u16;
+                new_val = ((((self.data[index_temp + 4] as u16) << 8) | (self.data[index_temp + 5] as u16)) as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u16;
                 self.data[index_temp + 4] = (new_val >> 8) as u8;
                 self.data[index_temp + 5] = new_val as u8;
-                new_val = ((((self.data[index_temp + 6] as u16) << 8)
-                    | (self.data[index_temp + 7] as u16)) as f64
-                    * (1.0 - opacity)
-                    + val[3] as f64 * opacity)
-                    .round() as u16;
+                new_val = ((((self.data[index_temp + 6] as u16) << 8) | (self.data[index_temp + 7] as u16)) as f64 * (1.0 - opacity) + val[3] as f64 * opacity).round() as u16;
                 self.data[index_temp + 6] = (new_val >> 8) as u8;
                 self.data[index_temp + 7] = new_val as u8;
             }
         }
     }
 
-    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(
-        &mut self,
-        index: (RX, RY),
-        color: Colors,
-    ) -> Result<(), Error> {
+    fn fill<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color) -> Result<(), Error> {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
                 if x >= self.width {
@@ -2166,18 +1782,18 @@ impl Indexing for Image {
             Bound::Unbounded => self.height,
         };
 
-        if ImageType::from(color) != self.image_type {
+        if ColorType::from(color) != self.image_type {
             return Err(Error::WrongColor);
         }
 
         match color {
-            Colors::GRAY8(val) => {
+            Color::GRAY8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index = self.index_unchecked((index_x_lower, y));
                     self.data[temp_index..temp_index + index_x_upper - index_x_lower].fill(val);
                 }
             }
-            Colors::GRAYA8(val) => {
+            Color::GRAYA8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 2;
@@ -2187,7 +1803,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::GRAY16(val) => {
+            Color::GRAY16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 2;
@@ -2197,7 +1813,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::GRAYA16(val) => {
+            Color::GRAYA16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 4;
@@ -2209,7 +1825,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::RGB8(val) => {
+            Color::RGB8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 3;
@@ -2220,7 +1836,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::RGBA8(val) => {
+            Color::RGBA8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 4;
@@ -2232,7 +1848,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::RGB16(val) => {
+            Color::RGB16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 6;
@@ -2246,7 +1862,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::RGBA16(val) => {
+            Color::RGBA16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 8;
@@ -2266,11 +1882,7 @@ impl Indexing for Image {
         Ok(())
     }
 
-    fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(
-        &mut self,
-        index: (RX, RY),
-        color: Colors,
-    ) {
+    fn fill_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color) {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => x,
             Bound::Excluded(&x) => x + 1,
@@ -2296,13 +1908,13 @@ impl Indexing for Image {
         };
 
         match color {
-            Colors::GRAY8(val) => {
+            Color::GRAY8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index = self.index_unchecked((index_x_lower, y));
                     self.data[temp_index..temp_index + index_x_upper - index_x_lower].fill(val);
                 }
             }
-            Colors::GRAYA8(val) => {
+            Color::GRAYA8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 2;
@@ -2312,7 +1924,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::GRAY16(val) => {
+            Color::GRAY16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 2;
@@ -2322,7 +1934,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::GRAYA16(val) => {
+            Color::GRAYA16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 4;
@@ -2334,7 +1946,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::RGB8(val) => {
+            Color::RGB8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 3;
@@ -2345,7 +1957,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::RGBA8(val) => {
+            Color::RGBA8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 4;
@@ -2357,7 +1969,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::RGB16(val) => {
+            Color::RGB16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 6;
@@ -2371,7 +1983,7 @@ impl Indexing for Image {
                     }
                 }
             }
-            Colors::RGBA16(val) => {
+            Color::RGBA16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 8;
@@ -2390,12 +2002,7 @@ impl Indexing for Image {
         }
     }
 
-    fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(
-        &mut self,
-        index: (RX, RY),
-        color: Colors,
-        opacity: f64,
-    ) -> Result<(), Error> {
+    fn fill_transparent<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color, opacity: f64) -> Result<(), Error> {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => {
                 if x >= self.width {
@@ -2460,172 +2067,112 @@ impl Indexing for Image {
             Bound::Unbounded => self.height,
         };
 
-        if ImageType::from(color) != self.image_type {
+        if ColorType::from(color) != self.image_type {
             return Err(Error::WrongColor);
         }
 
         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
 
         match color {
-            Colors::GRAY8(val) => {
+            Color::GRAY8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower);
                     for x in temp_index_low..temp_index_high {
-                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity)
-                            + val as f64 * opacity)
-                            .round() as u8;
+                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity) + val as f64 * opacity).round() as u8;
                     }
                 }
             }
-            Colors::GRAYA8(val) => {
+            Color::GRAYA8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 2;
                     for x in (temp_index_low..temp_index_high).step_by(2) {
-                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity)
-                            + val[0] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u8;
+                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
                     }
                 }
             }
-            Colors::GRAY16(val) => {
+            Color::GRAY16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 2;
                     for x in (temp_index_low..temp_index_high).step_by(2) {
-                        let new_val: u16 =
-                            ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64
-                                * (1.0 - opacity)
-                                + val as f64 * opacity)
-                                .round() as u16;
+                        let new_val: u16 = ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64 * (1.0 - opacity) + val as f64 * opacity).round() as u16;
                         self.data[x] = (new_val >> 8) as u8;
                         self.data[x + 1] = new_val as u8;
                     }
                 }
             }
-            Colors::GRAYA16(val) => {
+            Color::GRAYA16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 4;
                     for x in (temp_index_low..temp_index_high).step_by(4) {
-                        let mut new_val: u16 =
-                            ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64
-                                * (1.0 - opacity)
-                                + val[0] as f64 * opacity)
-                                .round() as u16;
+                        let mut new_val: u16 = ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                         self.data[x] = (new_val >> 8) as u8;
                         self.data[x + 1] = new_val as u8;
-                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                         self.data[x + 2] = (new_val >> 8) as u8;
                         self.data[x + 3] = new_val as u8;
                     }
                 }
             }
-            Colors::RGB8(val) => {
+            Color::RGB8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 3;
                     for x in (temp_index_low..temp_index_high).step_by(3) {
-                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity)
-                            + val[0] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 2] = (self.data[x + 2] as f64 * (1.0 - opacity)
-                            + val[2] as f64 * opacity)
-                            .round() as u8;
+                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
+                        self.data[x + 2] = (self.data[x + 2] as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u8;
                     }
                 }
             }
-            Colors::RGBA8(val) => {
+            Color::RGBA8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 4;
                     for x in (temp_index_low..temp_index_high).step_by(4) {
-                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity)
-                            + val[0] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 2] = (self.data[x + 2] as f64 * (1.0 - opacity)
-                            + val[2] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 3] = (self.data[x + 3] as f64 * (1.0 - opacity)
-                            + val[3] as f64 * opacity)
-                            .round() as u8;
+                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
+                        self.data[x + 2] = (self.data[x + 2] as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u8;
+                        self.data[x + 3] = (self.data[x + 3] as f64 * (1.0 - opacity) + val[3] as f64 * opacity).round() as u8;
                     }
                 }
             }
-            Colors::RGB16(val) => {
+            Color::RGB16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 6;
                     for x in (temp_index_low..temp_index_high).step_by(6) {
-                        let mut new_val: u16 =
-                            ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64
-                                * (1.0 - opacity)
-                                + val[0] as f64 * opacity)
-                                .round() as u16;
+                        let mut new_val: u16 = ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                         self.data[x] = (new_val >> 8) as u8;
                         self.data[x + 1] = new_val as u8;
-                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                         self.data[x + 2] = (new_val >> 8) as u8;
                         self.data[x + 3] = new_val as u8;
-                        new_val = ((((self.data[x + 4] as u16) << 8) | (self.data[x + 5] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[2] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 4] as u16) << 8) | (self.data[x + 5] as u16)) as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u16;
                         self.data[x + 4] = (new_val >> 8) as u8;
                         self.data[x + 5] = new_val as u8;
                     }
                 }
             }
-            Colors::RGBA16(val) => {
+            Color::RGBA16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 8;
                     for x in (temp_index_low..temp_index_high).step_by(8) {
-                        let mut new_val: u16 =
-                            ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64
-                                * (1.0 - opacity)
-                                + val[0] as f64 * opacity)
-                                .round() as u16;
+                        let mut new_val: u16 = ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                         self.data[x] = (new_val >> 8) as u8;
                         self.data[x + 1] = new_val as u8;
-                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                         self.data[x + 2] = (new_val >> 8) as u8;
                         self.data[x + 3] = new_val as u8;
-                        new_val = ((((self.data[x + 4] as u16) << 8) | (self.data[x + 5] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[2] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 4] as u16) << 8) | (self.data[x + 5] as u16)) as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u16;
                         self.data[x + 4] = (new_val >> 8) as u8;
                         self.data[x + 5] = new_val as u8;
-                        new_val = ((((self.data[x + 6] as u16) << 8) | (self.data[x + 7] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[3] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 6] as u16) << 8) | (self.data[x + 7] as u16)) as f64 * (1.0 - opacity) + val[3] as f64 * opacity).round() as u16;
                         self.data[x + 6] = (new_val >> 8) as u8;
                         self.data[x + 7] = new_val as u8;
                     }
@@ -2635,12 +2182,7 @@ impl Indexing for Image {
         Ok(())
     }
 
-    fn fill_transparent_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(
-        &mut self,
-        index: (RX, RY),
-        color: Colors,
-        opacity: f64,
-    ) {
+    fn fill_transparent_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color, opacity: f64) {
         let index_x_lower: usize = match index.0.start_bound() {
             Bound::Included(&x) => x,
             Bound::Excluded(&x) => x + 1,
@@ -2668,165 +2210,105 @@ impl Indexing for Image {
         // background color aware ===> color = color + (new_color - color) * color_percentage ===> color = color * (1 - color_percentage) + new_color * color_percentage
 
         match color {
-            Colors::GRAY8(val) => {
+            Color::GRAY8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower);
                     for x in temp_index_low..temp_index_high {
-                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity)
-                            + val as f64 * opacity)
-                            .round() as u8;
+                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity) + val as f64 * opacity).round() as u8;
                     }
                 }
             }
-            Colors::GRAYA8(val) => {
+            Color::GRAYA8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 2;
                     for x in (temp_index_low..temp_index_high).step_by(2) {
-                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity)
-                            + val[0] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u8;
+                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
                     }
                 }
             }
-            Colors::GRAY16(val) => {
+            Color::GRAY16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 2;
                     for x in (temp_index_low..temp_index_high).step_by(2) {
-                        let new_val: u16 =
-                            ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64
-                                * (1.0 - opacity)
-                                + val as f64 * opacity)
-                                .round() as u16;
+                        let new_val: u16 = ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64 * (1.0 - opacity) + val as f64 * opacity).round() as u16;
                         self.data[x] = (new_val >> 8) as u8;
                         self.data[x + 1] = new_val as u8;
                     }
                 }
             }
-            Colors::GRAYA16(val) => {
+            Color::GRAYA16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 4;
                     for x in (temp_index_low..temp_index_high).step_by(4) {
-                        let mut new_val: u16 =
-                            ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64
-                                * (1.0 - opacity)
-                                + val[0] as f64 * opacity)
-                                .round() as u16;
+                        let mut new_val: u16 = ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                         self.data[x] = (new_val >> 8) as u8;
                         self.data[x + 1] = new_val as u8;
-                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                         self.data[x + 2] = (new_val >> 8) as u8;
                         self.data[x + 3] = new_val as u8;
                     }
                 }
             }
-            Colors::RGB8(val) => {
+            Color::RGB8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 3;
                     for x in (temp_index_low..temp_index_high).step_by(3) {
-                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity)
-                            + val[0] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 2] = (self.data[x + 2] as f64 * (1.0 - opacity)
-                            + val[2] as f64 * opacity)
-                            .round() as u8;
+                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
+                        self.data[x + 2] = (self.data[x + 2] as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u8;
                     }
                 }
             }
-            Colors::RGBA8(val) => {
+            Color::RGBA8(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 4;
                     for x in (temp_index_low..temp_index_high).step_by(4) {
-                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity)
-                            + val[0] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 2] = (self.data[x + 2] as f64 * (1.0 - opacity)
-                            + val[2] as f64 * opacity)
-                            .round() as u8;
-                        self.data[x + 3] = (self.data[x + 3] as f64 * (1.0 - opacity)
-                            + val[3] as f64 * opacity)
-                            .round() as u8;
+                        self.data[x] = (self.data[x] as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u8;
+                        self.data[x + 1] = (self.data[x + 1] as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u8;
+                        self.data[x + 2] = (self.data[x + 2] as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u8;
+                        self.data[x + 3] = (self.data[x + 3] as f64 * (1.0 - opacity) + val[3] as f64 * opacity).round() as u8;
                     }
                 }
             }
-            Colors::RGB16(val) => {
+            Color::RGB16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 6;
                     for x in (temp_index_low..temp_index_high).step_by(6) {
-                        let mut new_val: u16 =
-                            ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64
-                                * (1.0 - opacity)
-                                + val[0] as f64 * opacity)
-                                .round() as u16;
+                        let mut new_val: u16 = ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                         self.data[x] = (new_val >> 8) as u8;
                         self.data[x + 1] = new_val as u8;
-                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                         self.data[x + 2] = (new_val >> 8) as u8;
                         self.data[x + 3] = new_val as u8;
-                        new_val = ((((self.data[x + 4] as u16) << 8) | (self.data[x + 5] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[2] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 4] as u16) << 8) | (self.data[x + 5] as u16)) as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u16;
                         self.data[x + 4] = (new_val >> 8) as u8;
                         self.data[x + 5] = new_val as u8;
                     }
                 }
             }
-            Colors::RGBA16(val) => {
+            Color::RGBA16(val) => {
                 for y in index_y_lower..index_y_upper {
                     let temp_index_low = self.index_unchecked((index_x_lower, y));
                     let temp_index_high = temp_index_low + (index_x_upper - index_x_lower) * 8;
                     for x in (temp_index_low..temp_index_high).step_by(8) {
-                        let mut new_val: u16 =
-                            ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64
-                                * (1.0 - opacity)
-                                + val[0] as f64 * opacity)
-                                .round() as u16;
+                        let mut new_val: u16 = ((((self.data[x] as u16) << 8) | (self.data[x + 1] as u16)) as f64 * (1.0 - opacity) + val[0] as f64 * opacity).round() as u16;
                         self.data[x] = (new_val >> 8) as u8;
                         self.data[x + 1] = new_val as u8;
-                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[1] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 2] as u16) << 8) | (self.data[x + 3] as u16)) as f64 * (1.0 - opacity) + val[1] as f64 * opacity).round() as u16;
                         self.data[x + 2] = (new_val >> 8) as u8;
                         self.data[x + 3] = new_val as u8;
-                        new_val = ((((self.data[x + 4] as u16) << 8) | (self.data[x + 5] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[2] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 4] as u16) << 8) | (self.data[x + 5] as u16)) as f64 * (1.0 - opacity) + val[2] as f64 * opacity).round() as u16;
                         self.data[x + 4] = (new_val >> 8) as u8;
                         self.data[x + 5] = new_val as u8;
-                        new_val = ((((self.data[x + 6] as u16) << 8) | (self.data[x + 7] as u16))
-                            as f64
-                            * (1.0 - opacity)
-                            + val[3] as f64 * opacity)
-                            .round() as u16;
+                        new_val = ((((self.data[x + 6] as u16) << 8) | (self.data[x + 7] as u16)) as f64 * (1.0 - opacity) + val[3] as f64 * opacity).round() as u16;
                         self.data[x + 6] = (new_val >> 8) as u8;
                         self.data[x + 7] = new_val as u8;
                     }
@@ -2837,39 +2319,34 @@ impl Indexing for Image {
 }
 
 impl IO for Image {
-    fn from_bytes(
-        width: usize,
-        height: usize,
-        image_type: ImageType,
-        bytes: &[u8],
-    ) -> Result<Image, Error> {
+    fn from_bytes(width: usize, height: usize, image_type: ColorType, bytes: &[u8]) -> Result<Image, Error> {
         // check for valid size
         if bytes.len() != width * height * image_type.bytes_per_pixel() || bytes.is_empty() {
             return Err(Error::InvalidSize);
         }
         match image_type {
-            ImageType::GRAY8 => {}
-            ImageType::GRAYA8 | ImageType::GRAY16 => {
+            ColorType::GRAY8 => {}
+            ColorType::GRAYA8 | ColorType::GRAY16 => {
                 if bytes.len() % 2 != 0 {
                     return Err(Error::InvalidSize);
                 }
             }
-            ImageType::GRAYA16 | ImageType::RGBA8 => {
+            ColorType::GRAYA16 | ColorType::RGBA8 => {
                 if bytes.len() % 4 != 0 {
                     return Err(Error::InvalidSize);
                 }
             }
-            ImageType::RGB8 => {
+            ColorType::RGB8 => {
                 if bytes.len() % 3 != 0 {
                     return Err(Error::InvalidSize);
                 }
             }
-            ImageType::RGB16 => {
+            ColorType::RGB16 => {
                 if bytes.len() % 6 != 0 {
                     return Err(Error::InvalidSize);
                 }
             }
-            ImageType::RGBA16 => {
+            ColorType::RGBA16 => {
                 if bytes.len() % 8 != 0 {
                     return Err(Error::InvalidSize);
                 }
@@ -2882,12 +2359,12 @@ impl IO for Image {
         // check if all pixels have the same color
         let mut same_data = true;
         match image_type {
-            ImageType::GRAY8 => {
+            ColorType::GRAY8 => {
                 let mut data_iterator = data.iter();
                 let first_element = data_iterator.next().unwrap();
                 same_data = data_iterator.all(|&x| x == *first_element);
             }
-            ImageType::GRAYA8 | ImageType::GRAY16 => {
+            ColorType::GRAYA8 | ColorType::GRAY16 => {
                 for i in 0..2 {
                     for j in (i..(data.len() - 2)).step_by(2) {
                         if data[j] != data[j + 2] {
@@ -2897,7 +2374,7 @@ impl IO for Image {
                     }
                 }
             }
-            ImageType::GRAYA16 | ImageType::RGBA8 => {
+            ColorType::GRAYA16 | ColorType::RGBA8 => {
                 for i in 0..4 {
                     for j in (i..(data.len() - 4)).step_by(4) {
                         if data[j] != data[j + 4] {
@@ -2907,7 +2384,7 @@ impl IO for Image {
                     }
                 }
             }
-            ImageType::RGB8 => {
+            ColorType::RGB8 => {
                 for i in 0..3 {
                     for j in (i..(data.len() - 3)).step_by(3) {
                         if data[j] != data[j + 3] {
@@ -2917,7 +2394,7 @@ impl IO for Image {
                     }
                 }
             }
-            ImageType::RGB16 => {
+            ColorType::RGB16 => {
                 for i in 0..6 {
                     for j in (i..(data.len() - 6)).step_by(6) {
                         if data[j] != data[j + 6] {
@@ -2927,7 +2404,7 @@ impl IO for Image {
                     }
                 }
             }
-            ImageType::RGBA16 => {
+            ColorType::RGBA16 => {
                 for i in 0..8 {
                     for j in (i..(data.len() - 8)).step_by(8) {
                         if data[j] != data[j + 8] {
@@ -2942,21 +2419,18 @@ impl IO for Image {
         // if they do, store the color instead of the image data
         let background_data = if same_data {
             BackgroundData::Color(match image_type {
-                ImageType::GRAY8 => Colors::GRAY8(data[0]),
-                ImageType::GRAYA8 => Colors::GRAYA8([data[0], data[1]]),
-                ImageType::GRAY16 => Colors::GRAY16((data[0] as u16) << 8 | data[1] as u16),
-                ImageType::GRAYA16 => Colors::GRAYA16([
-                    (data[0] as u16) << 8 | data[1] as u16,
-                    (data[2] as u16) << 8 | data[3] as u16,
-                ]),
-                ImageType::RGB8 => Colors::RGB8([data[0], data[1], data[2]]),
-                ImageType::RGBA8 => Colors::RGBA8([data[0], data[1], data[2], data[3]]),
-                ImageType::RGB16 => Colors::RGB16([
+                ColorType::GRAY8 => Color::GRAY8(data[0]),
+                ColorType::GRAYA8 => Color::GRAYA8([data[0], data[1]]),
+                ColorType::GRAY16 => Color::GRAY16((data[0] as u16) << 8 | data[1] as u16),
+                ColorType::GRAYA16 => Color::GRAYA16([(data[0] as u16) << 8 | data[1] as u16, (data[2] as u16) << 8 | data[3] as u16]),
+                ColorType::RGB8 => Color::RGB8([data[0], data[1], data[2]]),
+                ColorType::RGBA8 => Color::RGBA8([data[0], data[1], data[2], data[3]]),
+                ColorType::RGB16 => Color::RGB16([
                     (data[0] as u16) << 8 | data[1] as u16,
                     (data[2] as u16) << 8 | data[3] as u16,
                     (data[4] as u16) << 8 | data[5] as u16,
                 ]),
-                ImageType::RGBA16 => Colors::RGBA16([
+                ColorType::RGBA16 => Color::RGBA16([
                     (data[0] as u16) << 8 | data[1] as u16,
                     (data[2] as u16) << 8 | data[3] as u16,
                     (data[4] as u16) << 8 | data[5] as u16,
@@ -2995,25 +2469,9 @@ impl IO for Image {
     fn from_file(path: &str) -> Result<Image, Box<dyn std::error::Error>> {
         let image: DynamicImage = ImageReader::open(path)?.decode()?;
 
-        let img_type = match image.color() {
-            ColorType::L8 => ImageType::GRAY8,
-            ColorType::La8 => ImageType::GRAYA8,
-            ColorType::L16 => ImageType::GRAY16,
-            ColorType::La16 => ImageType::GRAYA16,
-            ColorType::Rgb8 => ImageType::RGB8,
-            ColorType::Rgba8 => ImageType::RGBA8,
-            ColorType::Rgb16 => ImageType::RGB16,
-            ColorType::Rgba16 => ImageType::RGBA16,
-            _ => return Err(Box::new(Error::InvalidType)),
-        };
+        let img_type = image.color().into();
 
-        Self::from_bytes(
-            image.width() as usize,
-            image.height() as usize,
-            img_type,
-            image.as_bytes(),
-        )
-        .map_err(|err_type| Box::new(err_type) as Box<dyn std::error::Error>)
+        Self::from_bytes(image.width() as usize, image.height() as usize, img_type, image.as_bytes()).map_err(|err_type| Box::new(err_type) as Box<dyn std::error::Error>)
     }
 
     #[cfg(feature = "image")]
@@ -3026,13 +2484,7 @@ impl IO for Image {
                 return Err(Box::new(Error::FileExists));
             }
         }
-        save_buffer(
-            file_path,
-            self.to_bytes_ref(),
-            self.width as u32,
-            self.height as u32,
-            ColorType::from(self.image_type),
-        )?;
+        save_buffer(file_path, self.to_bytes_ref(), self.width as u32, self.height as u32, ImageColorType::from(self.image_type))?;
         Ok(())
     }
 }
@@ -3054,7 +2506,7 @@ impl Utilities for Image {
     }
 
     #[inline]
-    fn image_type(&self) -> ImageType {
+    fn image_type(&self) -> ColorType {
         self.image_type
     }
 
@@ -3072,8 +2524,8 @@ impl Utilities for Image {
         }
     }
 
-    fn fill_image(&mut self, color: Colors) -> Result<(), Error> {
-        if ImageType::from(color) != self.image_type {
+    fn fill_image(&mut self, color: Color) -> Result<(), Error> {
+        if ColorType::from(color) != self.image_type {
             Err(Error::WrongColor)
         } else {
             self.fill_unchecked((.., ..), color);
@@ -3085,12 +2537,12 @@ impl Utilities for Image {
         let mut same_data: bool = true;
 
         match self.image_type {
-            ImageType::GRAY8 => {
+            ColorType::GRAY8 => {
                 let mut data_iterator = self.data.iter();
                 let first_element = data_iterator.next().unwrap();
                 same_data = data_iterator.all(|&x| x == *first_element);
             }
-            ImageType::GRAYA8 | ImageType::GRAY16 => {
+            ColorType::GRAYA8 | ColorType::GRAY16 => {
                 for i in 0..2 {
                     for j in (i..(self.data.len() - 2)).step_by(2) {
                         if self.data[j] != self.data[j + 2] {
@@ -3100,7 +2552,7 @@ impl Utilities for Image {
                     }
                 }
             }
-            ImageType::GRAYA16 | ImageType::RGBA8 => {
+            ColorType::GRAYA16 | ColorType::RGBA8 => {
                 for i in 0..4 {
                     for j in (i..(self.data.len() - 4)).step_by(4) {
                         if self.data[j] != self.data[j + 4] {
@@ -3110,7 +2562,7 @@ impl Utilities for Image {
                     }
                 }
             }
-            ImageType::RGB8 => {
+            ColorType::RGB8 => {
                 for i in 0..3 {
                     for j in (i..(self.data.len() - 3)).step_by(3) {
                         if self.data[j] != self.data[j + 3] {
@@ -3120,7 +2572,7 @@ impl Utilities for Image {
                     }
                 }
             }
-            ImageType::RGB16 => {
+            ColorType::RGB16 => {
                 for i in 0..6 {
                     for j in (i..(self.data.len() - 6)).step_by(6) {
                         if self.data[j] != self.data[j + 6] {
@@ -3130,7 +2582,7 @@ impl Utilities for Image {
                     }
                 }
             }
-            ImageType::RGBA16 => {
+            ColorType::RGBA16 => {
                 for i in 0..8 {
                     for j in (i..(self.data.len() - 8)).step_by(8) {
                         if self.data[j] != self.data[j + 8] {
@@ -3144,25 +2596,18 @@ impl Utilities for Image {
 
         self.background_data = if same_data {
             BackgroundData::Color(match self.image_type {
-                ImageType::GRAY8 => Colors::GRAY8(self.data[0]),
-                ImageType::GRAYA8 => Colors::GRAYA8([self.data[0], self.data[1]]),
-                ImageType::GRAY16 => {
-                    Colors::GRAY16((self.data[0] as u16) << 8 | self.data[1] as u16)
-                }
-                ImageType::GRAYA16 => Colors::GRAYA16([
-                    (self.data[0] as u16) << 8 | self.data[1] as u16,
-                    (self.data[2] as u16) << 8 | self.data[3] as u16,
-                ]),
-                ImageType::RGB8 => Colors::RGB8([self.data[0], self.data[1], self.data[2]]),
-                ImageType::RGBA8 => {
-                    Colors::RGBA8([self.data[0], self.data[1], self.data[2], self.data[3]])
-                }
-                ImageType::RGB16 => Colors::RGB16([
+                ColorType::GRAY8 => Color::GRAY8(self.data[0]),
+                ColorType::GRAYA8 => Color::GRAYA8([self.data[0], self.data[1]]),
+                ColorType::GRAY16 => Color::GRAY16((self.data[0] as u16) << 8 | self.data[1] as u16),
+                ColorType::GRAYA16 => Color::GRAYA16([(self.data[0] as u16) << 8 | self.data[1] as u16, (self.data[2] as u16) << 8 | self.data[3] as u16]),
+                ColorType::RGB8 => Color::RGB8([self.data[0], self.data[1], self.data[2]]),
+                ColorType::RGBA8 => Color::RGBA8([self.data[0], self.data[1], self.data[2], self.data[3]]),
+                ColorType::RGB16 => Color::RGB16([
                     (self.data[0] as u16) << 8 | self.data[1] as u16,
                     (self.data[2] as u16) << 8 | self.data[3] as u16,
                     (self.data[4] as u16) << 8 | self.data[5] as u16,
                 ]),
-                ImageType::RGBA16 => Colors::RGBA16([
+                ColorType::RGBA16 => Color::RGBA16([
                     (self.data[0] as u16) << 8 | self.data[1] as u16,
                     (self.data[2] as u16) << 8 | self.data[3] as u16,
                     (self.data[4] as u16) << 8 | self.data[5] as u16,
@@ -3181,56 +2626,34 @@ mod tests {
 
     #[test]
     fn drawing_rectangle() {
-        let mut image = Image::new(100, 100, Colors::RGB8([255, 255, 255]));
+        let mut image = Image::new(100, 100, Color::RGB8([255, 255, 255]));
 
         // test errors
-        if image
-            .draw_rectangle((0, 0), (10, 10), Colors::RGBA8([0, 0, 0, 0]), 1, 1.0)
-            .is_ok()
-        {
+        if image.draw_rectangle((0, 0), (10, 10), Color::RGBA8([0, 0, 0, 0]), 1, 1.0).is_ok() {
             panic!("Should fail!")
         }
-        if image
-            .draw_rectangle((0, 0), (10, 10), Colors::RGB8([0, 0, 0]), 0, 1.1)
-            .is_ok()
-        {
+        if image.draw_rectangle((0, 0), (10, 10), Color::RGB8([0, 0, 0]), 0, 1.1).is_ok() {
             panic!("Should fail!")
         }
 
         // test drawing
-        image
-            .draw_rectangle((0, 0), (10, 10), Colors::RGB8([0, 0, 0]), 1, 1.0)
-            .unwrap();
-        image
-            .draw_rectangle((20, 20), (31, 31), Colors::RGB8([0, 0, 0]), 1, 0.5)
-            .unwrap();
-        image
-            .draw_rectangle((40, 40), (50, 50), Colors::RGB8([0, 0, 0]), 3, 1.0)
-            .unwrap();
-        image
-            .draw_rectangle((60, 60), (70, 70), Colors::RGB8([0, 0, 0]), 3, 0.5)
-            .unwrap();
-        image
-            .draw_rectangle((80, 80), (90, 90), Colors::RGB8([0, 0, 0]), 0, 1.0)
-            .unwrap();
-        image
-            .draw_rectangle((10, 90), (20, 80), Colors::RGB8([0, 0, 0]), 0, 0.5)
-            .unwrap();
-        image
-            .draw_rectangle((30, 70), (40, 60), Colors::RGB8([0, 0, 0]), 1000000, 1.0)
-            .unwrap();
-        image
-            .draw_rectangle((80, 10), (90, 30), Colors::RGB8([0, 0, 0]), 1000000, 0.5)
-            .unwrap();
+        image.draw_rectangle((0, 0), (10, 10), Color::RGB8([0, 0, 0]), 1, 1.0).unwrap();
+        image.draw_rectangle((20, 20), (31, 31), Color::RGB8([0, 0, 0]), 1, 0.5).unwrap();
+        image.draw_rectangle((40, 40), (50, 50), Color::RGB8([0, 0, 0]), 3, 1.0).unwrap();
+        image.draw_rectangle((60, 60), (70, 70), Color::RGB8([0, 0, 0]), 3, 0.5).unwrap();
+        image.draw_rectangle((80, 80), (90, 90), Color::RGB8([0, 0, 0]), 0, 1.0).unwrap();
+        image.draw_rectangle((10, 90), (20, 80), Color::RGB8([0, 0, 0]), 0, 0.5).unwrap();
+        image.draw_rectangle((30, 70), (40, 60), Color::RGB8([0, 0, 0]), 1000000, 1.0).unwrap();
+        image.draw_rectangle((80, 10), (90, 30), Color::RGB8([0, 0, 0]), 1000000, 0.5).unwrap();
 
         // image.to_file("test_drawing_rectangle.png", true).unwrap();
     }
 
     #[test]
     fn io_bytes() {
-        let image = Image::new(100, 100, Colors::GRAY8(255));
+        let image = Image::new(100, 100, Color::GRAY8(255));
         let bytes = image.to_bytes();
-        let image2 = Image::from_bytes(100, 100, ImageType::GRAY8, &bytes).unwrap();
+        let image2 = Image::from_bytes(100, 100, ColorType::GRAY8, &bytes).unwrap();
 
         assert_eq!(image, image2);
     }
@@ -3238,7 +2661,7 @@ mod tests {
     #[test]
     #[cfg(feature = "image")]
     fn io_gray8() {
-        let image = Image::new(100, 100, Colors::GRAY8(255));
+        let image = Image::new(100, 100, Color::GRAY8(255));
         image.to_file("test_io_gray8.png", true).unwrap();
         let image2 = Image::from_file("test_io_gray8.png").unwrap();
         remove_file("test_io_gray8.png").unwrap();
@@ -3249,7 +2672,7 @@ mod tests {
     #[test]
     #[cfg(feature = "image")]
     fn io_graya8() {
-        let image = Image::new(100, 100, Colors::GRAYA8([255, 255]));
+        let image = Image::new(100, 100, Color::GRAYA8([255, 255]));
         image.to_file("test_io_graya8.png", true).unwrap();
         let image2 = Image::from_file("test_io_graya8.png").unwrap();
         remove_file("test_io_graya8.png").unwrap();
@@ -3260,7 +2683,7 @@ mod tests {
     #[test]
     #[cfg(feature = "image")]
     fn io_gray16() {
-        let image = Image::new(100, 100, Colors::GRAY16(65535));
+        let image = Image::new(100, 100, Color::GRAY16(65535));
         image.to_file("test_io_gray16.png", true).unwrap();
         let image2 = Image::from_file("test_io_gray16.png").unwrap();
         remove_file("test_io_gray16.png").unwrap();
@@ -3271,7 +2694,7 @@ mod tests {
     #[test]
     #[cfg(feature = "image")]
     fn io_graya16() {
-        let image = Image::new(100, 100, Colors::GRAYA16([65535, 65535]));
+        let image = Image::new(100, 100, Color::GRAYA16([65535, 65535]));
         image.to_file("test_io_graya16.png", true).unwrap();
         let image2 = Image::from_file("test_io_graya16.png").unwrap();
         remove_file("test_io_graya16.png").unwrap();
@@ -3282,7 +2705,7 @@ mod tests {
     #[test]
     #[cfg(feature = "image")]
     fn io_rgb8() {
-        let image = Image::new(100, 100, Colors::RGB8([255, 255, 255]));
+        let image = Image::new(100, 100, Color::RGB8([255, 255, 255]));
         image.to_file("test_io_rgb8.png", true).unwrap();
         let image2 = Image::from_file("test_io_rgb8.png").unwrap();
         remove_file("test_io_rgb8.png").unwrap();
@@ -3293,7 +2716,7 @@ mod tests {
     #[test]
     #[cfg(feature = "image")]
     fn io_rgba8() {
-        let image = Image::new(100, 100, Colors::RGBA8([255, 255, 255, 255]));
+        let image = Image::new(100, 100, Color::RGBA8([255, 255, 255, 255]));
         image.to_file("test_io_rgba8.png", true).unwrap();
         let image2 = Image::from_file("test_io_rgba8.png").unwrap();
         remove_file("test_io_rgba8.png").unwrap();
@@ -3304,7 +2727,7 @@ mod tests {
     #[test]
     #[cfg(feature = "image")]
     fn io_rgb16() {
-        let image = Image::new(100, 100, Colors::RGB16([65535, 65535, 65535]));
+        let image = Image::new(100, 100, Color::RGB16([65535, 65535, 65535]));
         image.to_file("test_io_rgb16.png", true).unwrap();
         let image2 = Image::from_file("test_io_rgb16.png").unwrap();
         remove_file("test_io_rgb16.png").unwrap();
@@ -3315,7 +2738,7 @@ mod tests {
     #[test]
     #[cfg(feature = "image")]
     fn io_rgba16() {
-        let image = Image::new(100, 100, Colors::RGBA16([65535, 65535, 65535, 65535]));
+        let image = Image::new(100, 100, Color::RGBA16([65535, 65535, 65535, 65535]));
         image.to_file("test_io_rgba16.png", true).unwrap();
         let image2 = Image::from_file("test_io_rgba16.png").unwrap();
         remove_file("test_io_rgba16.png").unwrap();
@@ -3325,7 +2748,7 @@ mod tests {
 
     #[test]
     fn utilities_fields() {
-        let image = Image::new(100, 100, Colors::GRAY8(255));
+        let image = Image::new(100, 100, Color::GRAY8(255));
 
         assert_eq!(image.data(), &vec![255; 100 * 100]);
         assert_eq!(image.data(), &image.data);
@@ -3336,46 +2759,38 @@ mod tests {
         assert_eq!(image.height(), 100);
         assert_eq!(image.height(), image.height);
 
-        assert_eq!(image.image_type(), ImageType::GRAY8);
+        assert_eq!(image.image_type(), ColorType::GRAY8);
         assert_eq!(image.image_type(), image.image_type);
     }
 
     #[test]
     fn utilities_background() {
-        let mut image = Image::new(100, 100, Colors::RGB8([100, 120, 140]));
+        let mut image = Image::new(100, 100, Color::RGB8([100, 120, 140]));
         let image_original = image.clone();
 
-        if image.fill_image(Colors::GRAY8(255)).is_ok() {
+        if image.fill_image(Color::GRAY8(255)).is_ok() {
             panic!("Should fail!")
         }
 
-        image.fill_image(Colors::RGB8([0, 0, 0])).unwrap();
+        image.fill_image(Color::RGB8([0, 0, 0])).unwrap();
         assert_ne!(image, image_original);
 
         image.clear();
         assert_eq!(image, image_original);
 
-        image.fill_image(Colors::RGB8([130, 150, 170])).unwrap();
+        image.fill_image(Color::RGB8([130, 150, 170])).unwrap();
         image.save_background();
         image.clear();
         assert_ne!(image, image_original);
-        assert_eq!(
-            image.background_data,
-            BackgroundData::Color(Colors::RGB8([130, 150, 170]))
-        );
+        assert_eq!(image.background_data, BackgroundData::Color(Color::RGB8([130, 150, 170])));
 
-        image.fill_image(Colors::RGB8([100, 120, 140])).unwrap();
+        image.fill_image(Color::RGB8([100, 120, 140])).unwrap();
         image.save_background();
         image.clear();
         assert_eq!(image, image_original);
-        assert_eq!(
-            image.background_data,
-            BackgroundData::Color(Colors::RGB8([100, 120, 140]))
-        );
+        assert_eq!(image.background_data, BackgroundData::Color(Color::RGB8([100, 120, 140])));
 
-        image
-            .set((0, image.height - 1), Colors::RGB8([0, 0, 0]))
-            .unwrap();
+        image.set((0, image.height - 1), Color::RGB8([0, 0, 0])).unwrap();
         image.save_background();
         image.clear();
         assert_ne!(image, image_original);

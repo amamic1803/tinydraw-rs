@@ -29,9 +29,13 @@
 //! **Colorspaces:** RGB8
 //! Coordinates origin is in the bottom left corner of the image.
 
+pub mod colors;
 pub mod conversions;
 pub mod error;
 pub mod image;
+
+#[doc(inline)]
+pub use colors::*;
 
 #[doc(inline)]
 pub use conversions::*;
