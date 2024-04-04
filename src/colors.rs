@@ -1,8 +1,10 @@
 //! The module that holds the color information
 
-use image::ColorType as ImageColorType;
 use std::fmt::Display;
 use std::slice;
+
+#[cfg(feature = "image")]
+use image::ColorType as ImageColorType;
 
 /// An enum that holds the image type information
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]

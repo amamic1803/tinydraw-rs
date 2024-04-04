@@ -19,5 +19,8 @@ opt-level = 3
 [dependencies]
 image = { version = "0.25.1", optional = true }
 
+[dev-dependencies]
+tempfile = "3.10.1"
+
 [package.metadata.docs.rs]
 all-features = true

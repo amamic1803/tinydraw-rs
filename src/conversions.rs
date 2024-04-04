@@ -1,5 +1,5 @@
 use crate::colors::{Color, ColorType};
-use crate::image::{BackgroundData, Image};
+use crate::image::Image;
 
 /// A trait for converting between different color/image types.
 pub trait Conversions {
@@ -175,10 +175,10 @@ pub trait Conversions {
     /// * ```img_bytes``` - The bytes of the image.
     /// * ```img_type``` - The color type of the image.
     /// * ```img_type_new``` - The color type to which the image will be converted.
-    fn convert_bytes(data: &mut Vec<u8>, img_type: ColorType, img_type_new: ColorType) {
-        match img_type {
+    fn convert_bytes(data: &mut Vec<u8>, color_type: ColorType, color_type_new: ColorType) {
+        match color_type {
             ColorType::GRAY8 => {
-                match img_type_new {
+                match color_type_new {
                     ColorType::GRAY8 => {} // do nothing (same type)
                     ColorType::GRAYA8 => {
                         let original_len = data.len();
@@ -315,7 +315,7 @@ pub trait Conversions {
                 }
             }
             ColorType::GRAYA8 => {
-                match img_type_new {
+                match color_type_new {
                     ColorType::GRAY8 => {
                         // bit shift to the right by 1 == divide by 2
 
@@ -431,7 +431,7 @@ pub trait Conversions {
                 }
             }
             ColorType::GRAY16 => {
-                match img_type_new {
+                match color_type_new {
                     ColorType::GRAY8 => {
                         for i in (0..data.len()).step_by(2) {
                             data[i >> 1] = Self::val_u16_to_u8(u16::from_ne_bytes([data[i], data[i + 1]]));
@@ -549,7 +549,7 @@ pub trait Conversions {
                 }
             }
             ColorType::GRAYA16 => {
-                match img_type_new {
+                match color_type_new {
                     ColorType::GRAY8 => {
                         // bit shift to the right by 2 == divide by 4
                         for i in (0..data.len()).step_by(4) {
@@ -643,7 +643,7 @@ pub trait Conversions {
                 }
             }
             ColorType::RGB8 => {
-                match img_type_new {
+                match color_type_new {
                     ColorType::GRAY8 => {
                         for i in (0..data.len()).step_by(3) {
                             data[i / 3] = Self::average(&data[i..(i + 3)]);
@@ -772,7 +772,7 @@ pub trait Conversions {
                 }
             }
             ColorType::RGBA8 => {
-                match img_type_new {
+                match color_type_new {
                     ColorType::GRAY8 => {
                         for i in (0..data.len()).step_by(4) {
                             data[i >> 2] = Self::average(&data[i..(i + 3)]);
@@ -880,7 +880,7 @@ pub trait Conversions {
                 }
             }
             ColorType::RGB16 => {
-                match img_type_new {
+                match color_type_new {
                     ColorType::GRAY8 => {
                         for i in (0..data.len()).step_by(6) {
                             data[i / 6] = Self::val_u16_to_u8(Self::average(&[
@@ -989,7 +989,7 @@ pub trait Conversions {
                 }
             }
             ColorType::RGBA16 => {
-                match img_type_new {
+                match color_type_new {
                     ColorType::GRAY8 => {
                         for i in (0..data.len()).step_by(8) {
                             data[i >> 3] = Self::val_u16_to_u8(Self::average(&[
@@ -1095,171 +1095,162 @@ pub trait Conversions {
 
     /// Converts the image to the specified color type.
     /// # Arguments
-    /// * ```image_type``` - The color type to which the image will be converted.
-    fn convert(&mut self, image_type: ColorType);
+    /// * ```color_type``` - The color type to which the image will be converted.
+    fn convert(&mut self, color_type: ColorType);
 }
 
 impl Conversions for Image {
-    fn convert(&mut self, image_type: ColorType) {
-        if self.image_type != image_type {
+    fn convert(&mut self, color_type: ColorType) {
+        if self.color_type != color_type {
             // convert image data
-            Self::convert_bytes(&mut self.data, self.image_type, image_type);
+            Self::convert_bytes(&mut self.data, self.color_type, color_type);
 
             // convert background data
-            match &mut self.background_data {
-                BackgroundData::Color(current_color) => {
-                    match current_color {
-                        Color::GRAY8(color) => {
-                            match image_type {
-                                ColorType::GRAY8 => {} // do nothing (same type)
-                                ColorType::GRAYA8 => *current_color = Color::GRAYA8([*color, 255]),
-                                ColorType::GRAY16 => *current_color = Color::GRAY16(Self::val_u8_to_u16(*color)),
-                                ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::val_u8_to_u16(*color), 65535]),
-                                ColorType::RGB8 => *current_color = Color::RGB8([*color, *color, *color]),
-                                ColorType::RGBA8 => *current_color = Color::RGBA8([*color, *color, *color, 255]),
-                                ColorType::RGB16 => {
-                                    let new_val = Self::val_u8_to_u16(*color);
-                                    *current_color = Color::RGB16([new_val, new_val, new_val])
-                                }
-                                ColorType::RGBA16 => {
-                                    let new_val = Self::val_u8_to_u16(*color);
-                                    *current_color = Color::RGBA16([new_val, new_val, new_val, 65535])
-                                }
+            if let Some(current_color) = &mut self.background_color {
+                match *current_color {
+                    Color::GRAY8(color) => {
+                        match color_type {
+                            ColorType::GRAY8 => {} // do nothing (same type)
+                            ColorType::GRAYA8 => *current_color = Color::GRAYA8([color, 255]),
+                            ColorType::GRAY16 => *current_color = Color::GRAY16(Self::val_u8_to_u16(color)),
+                            ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::val_u8_to_u16(color), 65535]),
+                            ColorType::RGB8 => *current_color = Color::RGB8([color, color, color]),
+                            ColorType::RGBA8 => *current_color = Color::RGBA8([color, color, color, 255]),
+                            ColorType::RGB16 => {
+                                let new_val = Self::val_u8_to_u16(color);
+                                *current_color = Color::RGB16([new_val, new_val, new_val])
                             }
-                        }
-                        Color::GRAYA8(color) => {
-                            match image_type {
-                                ColorType::GRAY8 => *current_color = Color::GRAY8(color[0]),
-                                ColorType::GRAYA8 => {} // do nothing (same type)
-                                ColorType::GRAY16 => *current_color = Color::GRAY16(Self::val_u8_to_u16(color[0])),
-                                ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::val_u8_to_u16(color[0]), Self::val_u8_to_u16(color[1])]),
-                                ColorType::RGB8 => *current_color = Color::RGB8([color[0], color[0], color[0]]),
-                                ColorType::RGBA8 => *current_color = Color::RGBA8([color[0], color[0], color[0], color[1]]),
-                                ColorType::RGB16 => {
-                                    let new_val = Self::val_u8_to_u16(color[0]);
-                                    *current_color = Color::RGB16([new_val, new_val, new_val])
-                                }
-                                ColorType::RGBA16 => {
-                                    let new_val = Self::val_u8_to_u16(color[0]);
-                                    *current_color = Color::RGBA16([new_val, new_val, new_val, Self::val_u8_to_u16(color[1])])
-                                }
-                            }
-                        }
-                        Color::GRAY16(color) => {
-                            match image_type {
-                                ColorType::GRAY8 => *current_color = Color::GRAY8(Self::val_u16_to_u8(*color)),
-                                ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::val_u16_to_u8(*color), 255]),
-                                ColorType::GRAY16 => {} // do nothing (same type)
-                                ColorType::GRAYA16 => *current_color = Color::GRAYA16([*color, 65535]),
-                                ColorType::RGB8 => {
-                                    let new_val = Self::val_u16_to_u8(*color);
-                                    *current_color = Color::RGB8([new_val, new_val, new_val])
-                                }
-                                ColorType::RGBA8 => {
-                                    let new_val = Self::val_u16_to_u8(*color);
-                                    *current_color = Color::RGBA8([new_val, new_val, new_val, 255])
-                                }
-                                ColorType::RGB16 => *current_color = Color::RGB16([*color, *color, *color]),
-                                ColorType::RGBA16 => *current_color = Color::RGBA16([*color, *color, *color, 65535]),
-                            }
-                        }
-                        Color::GRAYA16(color) => {
-                            match image_type {
-                                ColorType::GRAY8 => *current_color = Color::GRAY8(Self::val_u16_to_u8(color[0])),
-                                ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::val_u16_to_u8(color[0]), Self::val_u16_to_u8(color[1])]),
-                                ColorType::GRAY16 => *current_color = Color::GRAY16(color[0]),
-                                ColorType::GRAYA16 => {} // do nothing (same type)
-                                ColorType::RGB8 => {
-                                    let new_val = Self::val_u16_to_u8(color[0]);
-                                    *current_color = Color::RGB8([new_val, new_val, new_val])
-                                }
-                                ColorType::RGBA8 => {
-                                    let new_val = Self::val_u16_to_u8(color[0]);
-                                    *current_color = Color::RGBA8([new_val, new_val, new_val, Self::val_u16_to_u8(color[1])])
-                                }
-                                ColorType::RGB16 => *current_color = Color::RGB16([color[0], color[0], color[0]]),
-                                ColorType::RGBA16 => *current_color = Color::RGBA16([color[0], color[0], color[0], color[1]]),
-                            }
-                        }
-                        Color::RGB8(color) => {
-                            match image_type {
-                                ColorType::GRAY8 => *current_color = Color::GRAY8(Self::average(color as &[u8])),
-                                ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::average(color as &[u8]), 255]),
-                                ColorType::GRAY16 => *current_color = Color::GRAY16(Self::val_u8_to_u16(Self::average(color as &[u8]))),
-                                ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::val_u8_to_u16(Self::average(color as &[u8])), 65535]),
-                                ColorType::RGB8 => {} // do nothing (same type)
-                                ColorType::RGBA8 => *current_color = Color::RGBA8([color[0], color[1], color[2], 255]),
-                                ColorType::RGB16 => {
-                                    *current_color = Color::RGB16([Self::val_u8_to_u16(color[0]), Self::val_u8_to_u16(color[1]), Self::val_u8_to_u16(color[2])])
-                                }
-                                ColorType::RGBA16 => {
-                                    *current_color = Color::RGBA16([Self::val_u8_to_u16(color[0]), Self::val_u8_to_u16(color[1]), Self::val_u8_to_u16(color[2]), 65535])
-                                }
-                            }
-                        }
-                        Color::RGBA8(color) => {
-                            match image_type {
-                                ColorType::GRAY8 => *current_color = Color::GRAY8(Self::average(&color[..3])),
-                                ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::average(&color[..3]), color[3]]),
-                                ColorType::GRAY16 => *current_color = Color::GRAY16(Self::val_u8_to_u16(Self::average(&color[..3]))),
-                                ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::val_u8_to_u16(Self::average(&color[..3])), Self::val_u8_to_u16(color[3])]),
-                                ColorType::RGB8 => *current_color = Color::RGB8([color[0], color[1], color[2]]),
-                                ColorType::RGBA8 => {} // do nothing (same type)
-                                ColorType::RGB16 => {
-                                    *current_color = Color::RGB16([Self::val_u8_to_u16(color[0]), Self::val_u8_to_u16(color[1]), Self::val_u8_to_u16(color[2])])
-                                }
-                                ColorType::RGBA16 => {
-                                    *current_color = Color::RGBA16([
-                                        Self::val_u8_to_u16(color[0]),
-                                        Self::val_u8_to_u16(color[1]),
-                                        Self::val_u8_to_u16(color[2]),
-                                        Self::val_u8_to_u16(color[3]),
-                                    ])
-                                }
-                            }
-                        }
-                        Color::RGB16(color) => {
-                            match image_type {
-                                ColorType::GRAY8 => *current_color = Color::GRAY8(Self::val_u16_to_u8(Self::average(color as &[u16]))),
-                                ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::val_u16_to_u8(Self::average(color as &[u16])), 255]),
-                                ColorType::GRAY16 => *current_color = Color::GRAY16(Self::average(color as &[u16])),
-                                ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::average(color as &[u16]), 65535]),
-                                ColorType::RGB8 => *current_color = Color::RGB8([Self::val_u16_to_u8(color[0]), Self::val_u16_to_u8(color[1]), Self::val_u16_to_u8(color[2])]),
-                                ColorType::RGBA8 => {
-                                    *current_color = Color::RGBA8([Self::val_u16_to_u8(color[0]), Self::val_u16_to_u8(color[1]), Self::val_u16_to_u8(color[2]), 255])
-                                }
-                                ColorType::RGB16 => {} // do nothing (same type)
-                                ColorType::RGBA16 => *current_color = Color::RGBA16([color[0], color[1], color[2], 65535]),
-                            }
-                        }
-                        Color::RGBA16(color) => {
-                            match image_type {
-                                ColorType::GRAY8 => *current_color = Color::GRAY8(Self::val_u16_to_u8(Self::average(&color[..3]))),
-                                ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::val_u16_to_u8(Self::average(&color[..3])), Self::val_u16_to_u8(color[3])]),
-                                ColorType::GRAY16 => *current_color = Color::GRAY16(Self::average(&color[..3])),
-                                ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::average(&color[..3]), color[3]]),
-                                ColorType::RGB8 => *current_color = Color::RGB8([Self::val_u16_to_u8(color[0]), Self::val_u16_to_u8(color[1]), Self::val_u16_to_u8(color[2])]),
-                                ColorType::RGBA8 => {
-                                    *current_color = Color::RGBA8([
-                                        Self::val_u16_to_u8(color[0]),
-                                        Self::val_u16_to_u8(color[1]),
-                                        Self::val_u16_to_u8(color[2]),
-                                        Self::val_u16_to_u8(color[3]),
-                                    ])
-                                }
-                                ColorType::RGB16 => *current_color = Color::RGB16([color[0], color[1], color[2]]),
-                                ColorType::RGBA16 => {} // do nothing (same type)
+                            ColorType::RGBA16 => {
+                                let new_val = Self::val_u8_to_u16(color);
+                                *current_color = Color::RGBA16([new_val, new_val, new_val, 65535])
                             }
                         }
                     }
-                }
-                BackgroundData::Image(data) => {
-                    Self::convert_bytes(data, self.image_type, image_type);
+                    Color::GRAYA8(color) => {
+                        match color_type {
+                            ColorType::GRAY8 => *current_color = Color::GRAY8(color[0]),
+                            ColorType::GRAYA8 => {} // do nothing (same type)
+                            ColorType::GRAY16 => *current_color = Color::GRAY16(Self::val_u8_to_u16(color[0])),
+                            ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::val_u8_to_u16(color[0]), Self::val_u8_to_u16(color[1])]),
+                            ColorType::RGB8 => *current_color = Color::RGB8([color[0], color[0], color[0]]),
+                            ColorType::RGBA8 => *current_color = Color::RGBA8([color[0], color[0], color[0], color[1]]),
+                            ColorType::RGB16 => {
+                                let new_val = Self::val_u8_to_u16(color[0]);
+                                *current_color = Color::RGB16([new_val, new_val, new_val])
+                            }
+                            ColorType::RGBA16 => {
+                                let new_val = Self::val_u8_to_u16(color[0]);
+                                *current_color = Color::RGBA16([new_val, new_val, new_val, Self::val_u8_to_u16(color[1])])
+                            }
+                        }
+                    }
+                    Color::GRAY16(color) => {
+                        match color_type {
+                            ColorType::GRAY8 => *current_color = Color::GRAY8(Self::val_u16_to_u8(color)),
+                            ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::val_u16_to_u8(color), 255]),
+                            ColorType::GRAY16 => {} // do nothing (same type)
+                            ColorType::GRAYA16 => *current_color = Color::GRAYA16([color, 65535]),
+                            ColorType::RGB8 => {
+                                let new_val = Self::val_u16_to_u8(color);
+                                *current_color = Color::RGB8([new_val, new_val, new_val])
+                            }
+                            ColorType::RGBA8 => {
+                                let new_val = Self::val_u16_to_u8(color);
+                                *current_color = Color::RGBA8([new_val, new_val, new_val, 255])
+                            }
+                            ColorType::RGB16 => *current_color = Color::RGB16([color, color, color]),
+                            ColorType::RGBA16 => *current_color = Color::RGBA16([color, color, color, 65535]),
+                        }
+                    }
+                    Color::GRAYA16(color) => {
+                        match color_type {
+                            ColorType::GRAY8 => *current_color = Color::GRAY8(Self::val_u16_to_u8(color[0])),
+                            ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::val_u16_to_u8(color[0]), Self::val_u16_to_u8(color[1])]),
+                            ColorType::GRAY16 => *current_color = Color::GRAY16(color[0]),
+                            ColorType::GRAYA16 => {} // do nothing (same type)
+                            ColorType::RGB8 => {
+                                let new_val = Self::val_u16_to_u8(color[0]);
+                                *current_color = Color::RGB8([new_val, new_val, new_val])
+                            }
+                            ColorType::RGBA8 => {
+                                let new_val = Self::val_u16_to_u8(color[0]);
+                                *current_color = Color::RGBA8([new_val, new_val, new_val, Self::val_u16_to_u8(color[1])])
+                            }
+                            ColorType::RGB16 => *current_color = Color::RGB16([color[0], color[0], color[0]]),
+                            ColorType::RGBA16 => *current_color = Color::RGBA16([color[0], color[0], color[0], color[1]]),
+                        }
+                    }
+                    Color::RGB8(color) => {
+                        match color_type {
+                            ColorType::GRAY8 => *current_color = Color::GRAY8(Self::average(&color as &[u8])),
+                            ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::average(&color as &[u8]), 255]),
+                            ColorType::GRAY16 => *current_color = Color::GRAY16(Self::val_u8_to_u16(Self::average(&color as &[u8]))),
+                            ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::val_u8_to_u16(Self::average(&color as &[u8])), 65535]),
+                            ColorType::RGB8 => {} // do nothing (same type)
+                            ColorType::RGBA8 => *current_color = Color::RGBA8([color[0], color[1], color[2], 255]),
+                            ColorType::RGB16 => *current_color = Color::RGB16([Self::val_u8_to_u16(color[0]), Self::val_u8_to_u16(color[1]), Self::val_u8_to_u16(color[2])]),
+                            ColorType::RGBA16 => {
+                                *current_color = Color::RGBA16([Self::val_u8_to_u16(color[0]), Self::val_u8_to_u16(color[1]), Self::val_u8_to_u16(color[2]), 65535])
+                            }
+                        }
+                    }
+                    Color::RGBA8(color) => {
+                        match color_type {
+                            ColorType::GRAY8 => *current_color = Color::GRAY8(Self::average(&color[..3])),
+                            ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::average(&color[..3]), color[3]]),
+                            ColorType::GRAY16 => *current_color = Color::GRAY16(Self::val_u8_to_u16(Self::average(&color[..3]))),
+                            ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::val_u8_to_u16(Self::average(&color[..3])), Self::val_u8_to_u16(color[3])]),
+                            ColorType::RGB8 => *current_color = Color::RGB8([color[0], color[1], color[2]]),
+                            ColorType::RGBA8 => {} // do nothing (same type)
+                            ColorType::RGB16 => *current_color = Color::RGB16([Self::val_u8_to_u16(color[0]), Self::val_u8_to_u16(color[1]), Self::val_u8_to_u16(color[2])]),
+                            ColorType::RGBA16 => {
+                                *current_color = Color::RGBA16([
+                                    Self::val_u8_to_u16(color[0]),
+                                    Self::val_u8_to_u16(color[1]),
+                                    Self::val_u8_to_u16(color[2]),
+                                    Self::val_u8_to_u16(color[3]),
+                                ])
+                            }
+                        }
+                    }
+                    Color::RGB16(color) => {
+                        match color_type {
+                            ColorType::GRAY8 => *current_color = Color::GRAY8(Self::val_u16_to_u8(Self::average(&color as &[u16]))),
+                            ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::val_u16_to_u8(Self::average(&color as &[u16])), 255]),
+                            ColorType::GRAY16 => *current_color = Color::GRAY16(Self::average(&color as &[u16])),
+                            ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::average(&color as &[u16]), 65535]),
+                            ColorType::RGB8 => *current_color = Color::RGB8([Self::val_u16_to_u8(color[0]), Self::val_u16_to_u8(color[1]), Self::val_u16_to_u8(color[2])]),
+                            ColorType::RGBA8 => {
+                                *current_color = Color::RGBA8([Self::val_u16_to_u8(color[0]), Self::val_u16_to_u8(color[1]), Self::val_u16_to_u8(color[2]), 255])
+                            }
+                            ColorType::RGB16 => {} // do nothing (same type)
+                            ColorType::RGBA16 => *current_color = Color::RGBA16([color[0], color[1], color[2], 65535]),
+                        }
+                    }
+                    Color::RGBA16(color) => {
+                        match color_type {
+                            ColorType::GRAY8 => *current_color = Color::GRAY8(Self::val_u16_to_u8(Self::average(&color[..3]))),
+                            ColorType::GRAYA8 => *current_color = Color::GRAYA8([Self::val_u16_to_u8(Self::average(&color[..3])), Self::val_u16_to_u8(color[3])]),
+                            ColorType::GRAY16 => *current_color = Color::GRAY16(Self::average(&color[..3])),
+                            ColorType::GRAYA16 => *current_color = Color::GRAYA16([Self::average(&color[..3]), color[3]]),
+                            ColorType::RGB8 => *current_color = Color::RGB8([Self::val_u16_to_u8(color[0]), Self::val_u16_to_u8(color[1]), Self::val_u16_to_u8(color[2])]),
+                            ColorType::RGBA8 => {
+                                *current_color = Color::RGBA8([
+                                    Self::val_u16_to_u8(color[0]),
+                                    Self::val_u16_to_u8(color[1]),
+                                    Self::val_u16_to_u8(color[2]),
+                                    Self::val_u16_to_u8(color[3]),
+                                ])
+                            }
+                            ColorType::RGB16 => *current_color = Color::RGB16([color[0], color[1], color[2]]),
+                            ColorType::RGBA16 => {} // do nothing (same type)
+                        }
+                    }
                 }
             }
 
             // change image type
-            self.image_type = image_type;
+            self.color_type = color_type;
         }
     }
 }
@@ -1268,31 +1259,29 @@ impl Conversions for Image {
 mod tests {
     use super::*;
     use crate::colors::{Color, ColorType};
-    use crate::image::{Image, Indexing, Utilities};
+    use crate::image::{Image, Indexing};
 
     fn conversion_test(img1_colors: (Color, Color), img2_colors: (Color, Color)) {
         assert_eq!(ColorType::from(img1_colors.0), ColorType::from(img1_colors.1));
         assert_eq!(ColorType::from(img2_colors.0), ColorType::from(img2_colors.1));
 
-        let new_image_type = ColorType::from(img2_colors.0);
+        let new_color_type = ColorType::from(img2_colors.0);
 
         // simple conversion
         let mut img1 = Image::new(100, 100, img1_colors.0);
         let img2 = Image::new(100, 100, img2_colors.0);
-        img1.convert(new_image_type);
+        img1.convert(new_color_type);
         assert_eq!(img1, img2);
-        assert_eq!(img1.image_type, new_image_type);
+        assert_eq!(img1.color_type, new_color_type);
 
         // more complex conversion
         let mut img1 = Image::new(100, 100, img1_colors.0);
         img1.set((0, 0), img1_colors.1).unwrap();
-        img1.save_background();
         let mut img2 = Image::new(100, 100, img2_colors.0);
         img2.set((0, 0), img2_colors.1).unwrap();
-        img2.save_background();
-        img1.convert(new_image_type);
+        img1.convert(new_color_type);
         assert_eq!(img1, img2);
-        assert_eq!(img1.image_type, new_image_type);
+        assert_eq!(img1.color_type, new_color_type);
     }
 
     #[test]

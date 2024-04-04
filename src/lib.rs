@@ -33,6 +33,7 @@ pub mod colors;
 pub mod conversions;
 pub mod error;
 pub mod image;
+pub mod io;
 
 #[doc(inline)]
 pub use colors::*;
@@ -45,3 +46,6 @@ pub use error::*;
 
 #[doc(inline)]
 pub use image::*;
+
+#[doc(inline)]
+pub use io::*;

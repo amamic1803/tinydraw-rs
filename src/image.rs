@@ -10,14 +10,6 @@ use std::{
     ops::{Bound, RangeBounds},
 };
 
-// standard library imports when image feature is enabled
-#[cfg(feature = "image")]
-use std::{fs::remove_file, path::Path};
-
-// external library imports when image feature is enabled
-#[cfg(feature = "image")]
-use image::{io::Reader as ImageReader, save_buffer, ColorType as ImageColorType, DynamicImage};
-
 /// A struct that holds an image
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Image {
@@ -27,31 +19,22 @@ pub struct Image {
     pub(crate) width: usize,
     /// The height of the image
     pub(crate) height: usize,
-    /// The type of the image
-    pub(crate) image_type: ColorType,
-    /// The background of the image
-    pub(crate) background_data: BackgroundData,
+    /// The color type of the image
+    pub(crate) color_type: ColorType,
+    /// The background color of the image
+    pub(crate) background_color: Option<Color>,
 }
 impl Display for Image {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Image:\n   - dimensions: {}x{}\n   - type: {}   - size: {} bytes",
+            "Image:\n   - dimensions: {}x{}\n   - color type: {}   - size: {} bytes",
             self.width,
             self.height,
-            self.image_type,
+            self.color_type,
             self.data.len()
         )
     }
-}
-
-/// An enum that holds the background information for [Image]
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub(crate) enum BackgroundData {
-    /// The background is a color
-    Color(Color),
-    /// The background is an image
-    Image(Vec<u8>),
 }
 
 /// A trait for drawing on images.
@@ -184,51 +167,6 @@ pub trait Indexing {
     fn fill_transparent_unchecked<RX: RangeBounds<usize>, RY: RangeBounds<usize>>(&mut self, index: (RX, RY), color: Color, opacity: f64);
 }
 
-/// A trait for image input/output
-pub trait IO {
-    /// Creates a new image from the given bytes.
-    /// # Arguments
-    /// * ```width``` - The width of the image.
-    /// * ```height``` - The height of the image.
-    /// * ```image_type``` - The type of the image.
-    /// * ```bytes``` - The bytes of the image.
-    /// # Returns
-    /// * [Result] which holds new [Image] or [Err] with [Error].
-    fn from_bytes(width: usize, height: usize, image_type: ColorType, bytes: &[u8]) -> Result<Image, Error>;
-
-    /// Returns the bytes of the image as a vector.
-    /// # Returns
-    /// * The bytes of the image.
-    fn to_bytes(&self) -> Vec<u8>;
-
-    /// Returns the bytes of the image as a slice.
-    /// # Returns
-    /// * The bytes of the image.
-    fn to_bytes_ref(&self) -> &[u8];
-
-    /// Returns the bytes of the image as a mutable slice.
-    /// # Returns
-    /// * The bytes of the image.
-    fn to_bytes_ref_mut(&mut self) -> &mut [u8];
-
-    /// Creates a new image from the given file. Needs the ```image``` feature.
-    /// # Arguments
-    /// * ```path``` - The path to the file.
-    /// # Returns
-    /// * [Result] which holds new [Image] or [Box<dyn std::error::Error>].
-    #[cfg(feature = "image")]
-    fn from_file(path: &str) -> Result<Image, Box<dyn std::error::Error>>;
-
-    /// Writes the image to the given file. Needs the ```image``` feature.
-    /// # Arguments
-    /// * ```path``` - The path to the file.
-    /// * ```overwrite``` - Whether to overwrite the file if it already exists.
-    /// # Returns
-    /// * [Result] which holds [Ok] or [Box<dyn std::error::Error>].
-    #[cfg(feature = "image")]
-    fn to_file(&self, path: &str, overwrite: bool) -> Result<(), Box<dyn std::error::Error>>;
-}
-
 /// A trait with useful functions for images.
 pub trait Utilities {
     /// Returns the bytes of the image as a slice.
@@ -251,7 +189,7 @@ pub trait Utilities {
     /// Returns the type of the image.
     /// # Returns
     /// * The type of the image.
-    fn image_type(&self) -> ColorType;
+    fn color_type(&self) -> ColorType;
 
     /// Deletes all drawings, restores image to match the saved background.
     fn clear(&mut self);
@@ -260,7 +198,7 @@ pub trait Utilities {
     fn fill_image(&mut self, color: Color) -> Result<(), Error>;
 
     /// Saves the current state of the image as background.
-    fn save_background(&mut self);
+    fn set_background(&mut self, color: Color) -> Result<(), Error>;
 }
 
 /*
@@ -1365,8 +1303,8 @@ impl Image {
             data,
             width,
             height,
-            image_type: ColorType::from(background),
-            background_data: BackgroundData::Color(background),
+            color_type: ColorType::from(background),
+            background_color: Some(background),
         }
     }
 }
@@ -1386,7 +1324,7 @@ impl Drawing for Image {
 
     fn draw_rectangle(&mut self, point1: (usize, usize), point2: (usize, usize), color: Color, thickness: usize, opacity: f64) -> Result<(), Error> {
         // check if color is valid for this image type
-        if ColorType::from(color) != self.image_type {
+        if ColorType::from(color) != self.color_type {
             return Err(Error::WrongColor);
         }
 
@@ -1520,7 +1458,7 @@ impl Indexing for Image {
 
     #[inline]
     fn index_unchecked(&self, index: (usize, usize)) -> usize {
-        ((self.height - index.1 - 1) * self.width + index.0) * self.image_type.bytes_per_pixel()
+        ((self.height - index.1 - 1) * self.width + index.0) * self.color_type.bytes_per_pixel()
     }
 
     fn get(&self, index: (usize, usize)) -> Result<Color, Error> {
@@ -1533,7 +1471,7 @@ impl Indexing for Image {
 
     fn get_unchecked(&self, index: (usize, usize)) -> Color {
         let index_temp: usize = self.index_unchecked(index);
-        match self.image_type {
+        match self.color_type {
             ColorType::GRAY8 => Color::GRAY8(self.data[index_temp]),
             ColorType::GRAYA8 => Color::GRAYA8([self.data[index_temp], self.data[index_temp + 1]]),
             ColorType::GRAY16 => Color::GRAY16(((self.data[index_temp] as u16) << 8) | (self.data[index_temp + 1] as u16)),
@@ -1560,7 +1498,7 @@ impl Indexing for Image {
     fn set(&mut self, index: (usize, usize), color: Color) -> Result<(), Error> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(Error::OutOfBounds)
-        } else if ColorType::from(color) != self.image_type {
+        } else if ColorType::from(color) != self.color_type {
             Err(Error::WrongColor)
         } else {
             self.set_unchecked(index, color);
@@ -1624,7 +1562,7 @@ impl Indexing for Image {
     fn set_transparent(&mut self, index: (usize, usize), color: Color, opacity: f64) -> Result<(), Error> {
         if index.0 >= self.width || index.1 >= self.height {
             Err(Error::OutOfBounds)
-        } else if ColorType::from(color) != self.image_type {
+        } else if ColorType::from(color) != self.color_type {
             Err(Error::WrongColor)
         } else if opacity.is_nan() {
             Err(Error::InvalidOpacity)
@@ -1782,7 +1720,7 @@ impl Indexing for Image {
             Bound::Unbounded => self.height,
         };
 
-        if ColorType::from(color) != self.image_type {
+        if ColorType::from(color) != self.color_type {
             return Err(Error::WrongColor);
         }
 
@@ -2067,7 +2005,7 @@ impl Indexing for Image {
             Bound::Unbounded => self.height,
         };
 
-        if ColorType::from(color) != self.image_type {
+        if ColorType::from(color) != self.color_type {
             return Err(Error::WrongColor);
         }
 
@@ -2318,177 +2256,6 @@ impl Indexing for Image {
     }
 }
 
-impl IO for Image {
-    fn from_bytes(width: usize, height: usize, image_type: ColorType, bytes: &[u8]) -> Result<Image, Error> {
-        // check for valid size
-        if bytes.len() != width * height * image_type.bytes_per_pixel() || bytes.is_empty() {
-            return Err(Error::InvalidSize);
-        }
-        match image_type {
-            ColorType::GRAY8 => {}
-            ColorType::GRAYA8 | ColorType::GRAY16 => {
-                if bytes.len() % 2 != 0 {
-                    return Err(Error::InvalidSize);
-                }
-            }
-            ColorType::GRAYA16 | ColorType::RGBA8 => {
-                if bytes.len() % 4 != 0 {
-                    return Err(Error::InvalidSize);
-                }
-            }
-            ColorType::RGB8 => {
-                if bytes.len() % 3 != 0 {
-                    return Err(Error::InvalidSize);
-                }
-            }
-            ColorType::RGB16 => {
-                if bytes.len() % 6 != 0 {
-                    return Err(Error::InvalidSize);
-                }
-            }
-            ColorType::RGBA16 => {
-                if bytes.len() % 8 != 0 {
-                    return Err(Error::InvalidSize);
-                }
-            }
-        }
-
-        // copy data
-        let data = bytes.to_vec();
-
-        // check if all pixels have the same color
-        let mut same_data = true;
-        match image_type {
-            ColorType::GRAY8 => {
-                let mut data_iterator = data.iter();
-                let first_element = data_iterator.next().unwrap();
-                same_data = data_iterator.all(|&x| x == *first_element);
-            }
-            ColorType::GRAYA8 | ColorType::GRAY16 => {
-                for i in 0..2 {
-                    for j in (i..(data.len() - 2)).step_by(2) {
-                        if data[j] != data[j + 2] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            ColorType::GRAYA16 | ColorType::RGBA8 => {
-                for i in 0..4 {
-                    for j in (i..(data.len() - 4)).step_by(4) {
-                        if data[j] != data[j + 4] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            ColorType::RGB8 => {
-                for i in 0..3 {
-                    for j in (i..(data.len() - 3)).step_by(3) {
-                        if data[j] != data[j + 3] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            ColorType::RGB16 => {
-                for i in 0..6 {
-                    for j in (i..(data.len() - 6)).step_by(6) {
-                        if data[j] != data[j + 6] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            ColorType::RGBA16 => {
-                for i in 0..8 {
-                    for j in (i..(data.len() - 8)).step_by(8) {
-                        if data[j] != data[j + 8] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // if they do, store the color instead of the image data
-        let background_data = if same_data {
-            BackgroundData::Color(match image_type {
-                ColorType::GRAY8 => Color::GRAY8(data[0]),
-                ColorType::GRAYA8 => Color::GRAYA8([data[0], data[1]]),
-                ColorType::GRAY16 => Color::GRAY16((data[0] as u16) << 8 | data[1] as u16),
-                ColorType::GRAYA16 => Color::GRAYA16([(data[0] as u16) << 8 | data[1] as u16, (data[2] as u16) << 8 | data[3] as u16]),
-                ColorType::RGB8 => Color::RGB8([data[0], data[1], data[2]]),
-                ColorType::RGBA8 => Color::RGBA8([data[0], data[1], data[2], data[3]]),
-                ColorType::RGB16 => Color::RGB16([
-                    (data[0] as u16) << 8 | data[1] as u16,
-                    (data[2] as u16) << 8 | data[3] as u16,
-                    (data[4] as u16) << 8 | data[5] as u16,
-                ]),
-                ColorType::RGBA16 => Color::RGBA16([
-                    (data[0] as u16) << 8 | data[1] as u16,
-                    (data[2] as u16) << 8 | data[3] as u16,
-                    (data[4] as u16) << 8 | data[5] as u16,
-                    (data[6] as u16) << 8 | data[7] as u16,
-                ]),
-            })
-        } else {
-            BackgroundData::Image(data.clone())
-        };
-
-        Ok(Self {
-            width,
-            height,
-            image_type,
-            data,
-            background_data,
-        })
-    }
-
-    #[inline]
-    fn to_bytes(&self) -> Vec<u8> {
-        self.to_bytes_ref().to_vec()
-    }
-
-    #[inline]
-    fn to_bytes_ref(&self) -> &[u8] {
-        &self.data
-    }
-
-    #[inline]
-    fn to_bytes_ref_mut(&mut self) -> &mut [u8] {
-        &mut self.data
-    }
-
-    #[cfg(feature = "image")]
-    fn from_file(path: &str) -> Result<Image, Box<dyn std::error::Error>> {
-        let image: DynamicImage = ImageReader::open(path)?.decode()?;
-
-        let img_type = image.color().into();
-
-        Self::from_bytes(image.width() as usize, image.height() as usize, img_type, image.as_bytes()).map_err(|err_type| Box::new(err_type) as Box<dyn std::error::Error>)
-    }
-
-    #[cfg(feature = "image")]
-    fn to_file(&self, path: &str, overwrite: bool) -> Result<(), Box<dyn std::error::Error>> {
-        let file_path = Path::new(path);
-        if file_path.is_file() {
-            if overwrite {
-                remove_file(file_path)?;
-            } else {
-                return Err(Box::new(Error::FileExists));
-            }
-        }
-        save_buffer(file_path, self.to_bytes_ref(), self.width as u32, self.height as u32, ImageColorType::from(self.image_type))?;
-        Ok(())
-    }
-}
-
 impl Utilities for Image {
     #[inline]
     fn data(&self) -> &[u8] {
@@ -2506,26 +2273,21 @@ impl Utilities for Image {
     }
 
     #[inline]
-    fn image_type(&self) -> ColorType {
-        self.image_type
+    fn color_type(&self) -> ColorType {
+        self.color_type
     }
 
     fn clear(&mut self) {
-        match &self.background_data {
-            BackgroundData::Color(background_color) => {
-                let color_slice = background_color.as_slice();
-                for x in 0..self.data.len() {
-                    self.data[x] = color_slice[x % color_slice.len()];
-                }
-            }
-            BackgroundData::Image(background_bytes) => {
-                self.data = background_bytes.clone();
+        if let Some(color) = self.background_color {
+            let color_slice = color.as_slice();
+            for x in 0..self.data.len() {
+                self.data[x] = color_slice[x % color_slice.len()];
             }
         }
     }
 
     fn fill_image(&mut self, color: Color) -> Result<(), Error> {
-        if ColorType::from(color) != self.image_type {
+        if ColorType::from(color) != self.color_type {
             Err(Error::WrongColor)
         } else {
             self.fill_unchecked((.., ..), color);
@@ -2533,89 +2295,12 @@ impl Utilities for Image {
         }
     }
 
-    fn save_background(&mut self) {
-        let mut same_data: bool = true;
-
-        match self.image_type {
-            ColorType::GRAY8 => {
-                let mut data_iterator = self.data.iter();
-                let first_element = data_iterator.next().unwrap();
-                same_data = data_iterator.all(|&x| x == *first_element);
-            }
-            ColorType::GRAYA8 | ColorType::GRAY16 => {
-                for i in 0..2 {
-                    for j in (i..(self.data.len() - 2)).step_by(2) {
-                        if self.data[j] != self.data[j + 2] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            ColorType::GRAYA16 | ColorType::RGBA8 => {
-                for i in 0..4 {
-                    for j in (i..(self.data.len() - 4)).step_by(4) {
-                        if self.data[j] != self.data[j + 4] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            ColorType::RGB8 => {
-                for i in 0..3 {
-                    for j in (i..(self.data.len() - 3)).step_by(3) {
-                        if self.data[j] != self.data[j + 3] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            ColorType::RGB16 => {
-                for i in 0..6 {
-                    for j in (i..(self.data.len() - 6)).step_by(6) {
-                        if self.data[j] != self.data[j + 6] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            ColorType::RGBA16 => {
-                for i in 0..8 {
-                    for j in (i..(self.data.len() - 8)).step_by(8) {
-                        if self.data[j] != self.data[j + 8] {
-                            same_data = false;
-                            break;
-                        }
-                    }
-                }
-            }
-        };
-
-        self.background_data = if same_data {
-            BackgroundData::Color(match self.image_type {
-                ColorType::GRAY8 => Color::GRAY8(self.data[0]),
-                ColorType::GRAYA8 => Color::GRAYA8([self.data[0], self.data[1]]),
-                ColorType::GRAY16 => Color::GRAY16((self.data[0] as u16) << 8 | self.data[1] as u16),
-                ColorType::GRAYA16 => Color::GRAYA16([(self.data[0] as u16) << 8 | self.data[1] as u16, (self.data[2] as u16) << 8 | self.data[3] as u16]),
-                ColorType::RGB8 => Color::RGB8([self.data[0], self.data[1], self.data[2]]),
-                ColorType::RGBA8 => Color::RGBA8([self.data[0], self.data[1], self.data[2], self.data[3]]),
-                ColorType::RGB16 => Color::RGB16([
-                    (self.data[0] as u16) << 8 | self.data[1] as u16,
-                    (self.data[2] as u16) << 8 | self.data[3] as u16,
-                    (self.data[4] as u16) << 8 | self.data[5] as u16,
-                ]),
-                ColorType::RGBA16 => Color::RGBA16([
-                    (self.data[0] as u16) << 8 | self.data[1] as u16,
-                    (self.data[2] as u16) << 8 | self.data[3] as u16,
-                    (self.data[4] as u16) << 8 | self.data[5] as u16,
-                    (self.data[6] as u16) << 8 | self.data[7] as u16,
-                ]),
-            })
+    fn set_background(&mut self, color: Color) -> Result<(), Error> {
+        if ColorType::from(color) == self.color_type {
+            self.background_color = Some(color);
+            Ok(())
         } else {
-            BackgroundData::Image(self.data.clone())
+            Err(Error::WrongColor)
         }
     }
 }
@@ -2650,103 +2335,6 @@ mod tests {
     }
 
     #[test]
-    fn io_bytes() {
-        let image = Image::new(100, 100, Color::GRAY8(255));
-        let bytes = image.to_bytes();
-        let image2 = Image::from_bytes(100, 100, ColorType::GRAY8, &bytes).unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
-    #[cfg(feature = "image")]
-    fn io_gray8() {
-        let image = Image::new(100, 100, Color::GRAY8(255));
-        image.to_file("test_io_gray8.png", true).unwrap();
-        let image2 = Image::from_file("test_io_gray8.png").unwrap();
-        remove_file("test_io_gray8.png").unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
-    #[cfg(feature = "image")]
-    fn io_graya8() {
-        let image = Image::new(100, 100, Color::GRAYA8([255, 255]));
-        image.to_file("test_io_graya8.png", true).unwrap();
-        let image2 = Image::from_file("test_io_graya8.png").unwrap();
-        remove_file("test_io_graya8.png").unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
-    #[cfg(feature = "image")]
-    fn io_gray16() {
-        let image = Image::new(100, 100, Color::GRAY16(65535));
-        image.to_file("test_io_gray16.png", true).unwrap();
-        let image2 = Image::from_file("test_io_gray16.png").unwrap();
-        remove_file("test_io_gray16.png").unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
-    #[cfg(feature = "image")]
-    fn io_graya16() {
-        let image = Image::new(100, 100, Color::GRAYA16([65535, 65535]));
-        image.to_file("test_io_graya16.png", true).unwrap();
-        let image2 = Image::from_file("test_io_graya16.png").unwrap();
-        remove_file("test_io_graya16.png").unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
-    #[cfg(feature = "image")]
-    fn io_rgb8() {
-        let image = Image::new(100, 100, Color::RGB8([255, 255, 255]));
-        image.to_file("test_io_rgb8.png", true).unwrap();
-        let image2 = Image::from_file("test_io_rgb8.png").unwrap();
-        remove_file("test_io_rgb8.png").unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
-    #[cfg(feature = "image")]
-    fn io_rgba8() {
-        let image = Image::new(100, 100, Color::RGBA8([255, 255, 255, 255]));
-        image.to_file("test_io_rgba8.png", true).unwrap();
-        let image2 = Image::from_file("test_io_rgba8.png").unwrap();
-        remove_file("test_io_rgba8.png").unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
-    #[cfg(feature = "image")]
-    fn io_rgb16() {
-        let image = Image::new(100, 100, Color::RGB16([65535, 65535, 65535]));
-        image.to_file("test_io_rgb16.png", true).unwrap();
-        let image2 = Image::from_file("test_io_rgb16.png").unwrap();
-        remove_file("test_io_rgb16.png").unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
-    #[cfg(feature = "image")]
-    fn io_rgba16() {
-        let image = Image::new(100, 100, Color::RGBA16([65535, 65535, 65535, 65535]));
-        image.to_file("test_io_rgba16.png", true).unwrap();
-        let image2 = Image::from_file("test_io_rgba16.png").unwrap();
-        remove_file("test_io_rgba16.png").unwrap();
-
-        assert_eq!(image, image2);
-    }
-
-    #[test]
     fn utilities_fields() {
         let image = Image::new(100, 100, Color::GRAY8(255));
 
@@ -2759,44 +2347,8 @@ mod tests {
         assert_eq!(image.height(), 100);
         assert_eq!(image.height(), image.height);
 
-        assert_eq!(image.image_type(), ColorType::GRAY8);
-        assert_eq!(image.image_type(), image.image_type);
-    }
+        assert_eq!(image.color_type(), ColorType::GRAY8);
 
-    #[test]
-    fn utilities_background() {
-        let mut image = Image::new(100, 100, Color::RGB8([100, 120, 140]));
-        let image_original = image.clone();
-
-        if image.fill_image(Color::GRAY8(255)).is_ok() {
-            panic!("Should fail!")
-        }
-
-        image.fill_image(Color::RGB8([0, 0, 0])).unwrap();
-        assert_ne!(image, image_original);
-
-        image.clear();
-        assert_eq!(image, image_original);
-
-        image.fill_image(Color::RGB8([130, 150, 170])).unwrap();
-        image.save_background();
-        image.clear();
-        assert_ne!(image, image_original);
-        assert_eq!(image.background_data, BackgroundData::Color(Color::RGB8([130, 150, 170])));
-
-        image.fill_image(Color::RGB8([100, 120, 140])).unwrap();
-        image.save_background();
-        image.clear();
-        assert_eq!(image, image_original);
-        assert_eq!(image.background_data, BackgroundData::Color(Color::RGB8([100, 120, 140])));
-
-        image.set((0, image.height - 1), Color::RGB8([0, 0, 0])).unwrap();
-        image.save_background();
-        image.clear();
-        assert_ne!(image, image_original);
-
-        let mut vec_to_match: Vec<u8> = [100, 120, 140].repeat(image.width * image.height);
-        vec_to_match[..3].fill(0);
-        assert_eq!(image.background_data, BackgroundData::Image(vec_to_match));
+        // TODO: test set background, write docs for set background
     }
 }
