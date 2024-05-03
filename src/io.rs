@@ -1,4 +1,4 @@
-//! Input/Output for images.
+//! IO functions for images.
 
 use crate::colors::{Color, ColorType};
 use crate::error::Error;
@@ -10,8 +10,7 @@ use std::{fs::remove_file, path::Path};
 #[cfg(feature = "image")]
 use image::{io::Reader as ImageReader, save_buffer, ColorType as ImageColorType, DynamicImage};
 
-/// A trait for image input/output
-pub trait IO {
+impl Image {
     /// Creates a new image from the given bytes.
     /// # Arguments
     /// * ```width``` - The width of the image.
@@ -22,38 +21,7 @@ pub trait IO {
     /// * [Result] which holds new [Image] or [Err] with [Error].
     /// # Errors
     /// * [Error::InvalidSize] - If the size of the bytes is not equal to width * height * bytes per pixel.
-    fn from_bytes(width: usize, height: usize, color_type: ColorType, bytes: &[u8]) -> Result<Image, Error>;
-
-    /// Returns the bytes of the image as a native endian slice.
-    /// # Returns
-    /// * The bytes of the image.
-    fn as_bytes(&self) -> &[u8];
-
-    /// Returns the bytes of the image as a mutable native endian slice.
-    /// # Returns
-    /// * The bytes of the image.
-    fn as_bytes_mut(&mut self) -> &mut [u8];
-
-    /// Creates a new image from the given file. Requires the ```image``` feature.
-    /// # Arguments
-    /// * ```path``` - The path to the file.
-    /// # Returns
-    /// * [Result] which holds the new [Image] or [Box<dyn std::error::Error>].
-    #[cfg(feature = "image")]
-    fn from_file<F: AsRef<Path>>(path: F) -> Result<Image, Box<dyn std::error::Error>>;
-
-    /// Writes the image to the given file. Requires the ```image``` feature.
-    /// # Arguments
-    /// * ```path``` - The path to the file.
-    /// * ```overwrite``` - Whether to overwrite the file if it already exists.
-    /// # Returns
-    /// * [Result] which holds [Ok] or [Box<dyn std::error::Error>].
-    #[cfg(feature = "image")]
-    fn to_file<F: AsRef<Path>>(&self, path: F, overwrite: bool) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-impl IO for Image {
-    fn from_bytes(width: usize, height: usize, color_type: ColorType, bytes: &[u8]) -> Result<Image, Error> {
+    pub fn from_bytes(width: usize, height: usize, color_type: ColorType, bytes: &[u8]) -> Result<Image, Error> {
         // check for valid size
         if bytes.len() != width * height * color_type.bytes_per_pixel() || bytes.is_empty() {
             return Err(Error::InvalidSize);
@@ -105,24 +73,25 @@ impl IO for Image {
         })
     }
 
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        &self.data
-    }
-
-    #[inline]
-    fn as_bytes_mut(&mut self) -> &mut [u8] {
-        &mut self.data
-    }
-
+    /// Creates a new image from the given file. Requires the ```image``` feature.
+    /// # Arguments
+    /// * ```path``` - The path to the file.
+    /// # Returns
+    /// * [Result] which holds the new [Image] or [Box<dyn std::error::Error>].
     #[cfg(feature = "image")]
-    fn from_file<F: AsRef<Path>>(path: F) -> Result<Image, Box<dyn std::error::Error>> {
+    pub fn from_file<F: AsRef<Path>>(path: F) -> Result<Image, Box<dyn std::error::Error>> {
         let image: DynamicImage = ImageReader::open(path)?.decode()?;
         Ok(Self::from_bytes(image.width() as usize, image.height() as usize, image.color().into(), image.as_bytes())?)
     }
 
+    /// Writes the image to the given file. Requires the ```image``` feature.
+    /// # Arguments
+    /// * ```path``` - The path to the file.
+    /// * ```overwrite``` - Whether to overwrite the file if it already exists.
+    /// # Returns
+    /// * [Result] which holds [Ok] or [Box<dyn std::error::Error>].
     #[cfg(feature = "image")]
-    fn to_file<F: AsRef<Path>>(&self, path: F, overwrite: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn to_file<F: AsRef<Path>>(&self, path: F, overwrite: bool) -> Result<(), Box<dyn std::error::Error>> {
         let path = path.as_ref();
         if path.is_file() {
             if overwrite {
@@ -138,7 +107,6 @@ impl IO for Image {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::colors::{Color, ColorType};
     use crate::image::Image;
     #[cfg(feature = "image")]

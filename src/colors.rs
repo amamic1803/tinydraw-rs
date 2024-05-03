@@ -28,7 +28,7 @@ pub enum ColorType {
 }
 impl ColorType {
     #[inline]
-    pub fn bytes_per_pixel(&self) -> usize {
+    pub const fn bytes_per_pixel(&self) -> usize {
         //! Return the number of bytes per pixel
         match self {
             ColorType::GRAY8 => 1,
@@ -124,7 +124,7 @@ pub enum Color {
 }
 impl Color {
     #[inline]
-    pub fn bytes_per_pixel(&self) -> usize {
+    pub const fn bytes_per_pixel(&self) -> usize {
         //! Return the number of bytes per pixel
         match self {
             Color::GRAY8(_) => 1,
@@ -142,7 +142,7 @@ impl Color {
     /// The bytes of u16 are represented in native endianness.
     /// If the u16 is constructed back from the bytes,
     /// it should be done using [u16::from_ne_bytes()] to ensure the correct value.
-    pub fn as_slice(&self) -> &[u8] {
+    pub const fn as_bytes(&self) -> &[u8] {
         match self {
             Color::GRAY8(color) => slice::from_ref(color),
             Color::GRAYA8(color) => color as &[u8],

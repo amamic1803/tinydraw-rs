@@ -21,7 +21,7 @@ pub struct Image {
     pub(crate) height: usize,
     /// The color type of the image
     pub(crate) color_type: ColorType,
-    /// The background color of the image
+    /// The background color of the image, None if not set
     pub(crate) background_color: Option<Color>,
 }
 impl Display for Image {
@@ -169,36 +169,8 @@ pub trait Indexing {
 
 /// A trait with useful functions for images.
 pub trait Utilities {
-    /// Returns the bytes of the image as a slice.
-    /// Equivalent to [IO::to_bytes_ref].
-    /// If you want to edit the data, use [IO::to_bytes_ref_mut] or [Indexing] trait.
-    /// # Returns
-    /// * The bytes of the image.
-    fn data(&self) -> &[u8];
-
-    /// Returns the width of the image.
-    /// # Returns
-    /// * The width of the image.
-    fn width(&self) -> usize;
-
-    /// Returns the height of the image.
-    /// # Returns
-    /// * The height of the image.
-    fn height(&self) -> usize;
-
-    /// Returns the type of the image.
-    /// # Returns
-    /// * The type of the image.
-    fn color_type(&self) -> ColorType;
-
-    /// Deletes all drawings, restores image to match the saved background.
-    fn clear(&mut self);
-
     /// Fills the whole image with the given value.
     fn fill_image(&mut self, color: Color) -> Result<(), Error>;
-
-    /// Saves the current state of the image as background.
-    fn set_background(&mut self, color: Color) -> Result<(), Error>;
 }
 
 /*
@@ -1292,19 +1264,106 @@ impl Image<[u8; 3]> {
 */
 
 impl Image {
-    pub fn new(width: usize, height: usize, background: Color) -> Self {
-        let color_slice = background.as_slice();
-        let mut data = vec![0; width * height * color_slice.len()];
-        for x in 0..data.len() {
-            data[x] = color_slice[x % color_slice.len()];
-        }
-
-        Self {
+    /// Creates a new image with the given width, height, and background color.
+    /// # Arguments
+    /// * `width` - The width of the image.
+    /// * `height` - The height of the image.
+    /// * `background` - The background color of the image.
+    /// # Returns
+    /// * The new image.
+    #[allow(clippy::uninit_vec)]
+    pub fn new(width: usize, height: usize, background_color: Color) -> Self {
+        // create uninitialized data vector
+        let len = width * height * background_color.as_bytes().len();
+        let mut data = Vec::with_capacity(len);
+        unsafe { data.set_len(len); }
+        
+        // create image
+        let mut image = Self {
             data,
             width,
             height,
-            color_type: ColorType::from(background),
-            background_color: Some(background),
+            color_type: ColorType::from(background_color),
+            background_color: Some(background_color),
+        };
+        
+        // call clear to fill the image with the background color (initialize data)
+        image.clear();
+        
+        image
+    }
+
+    /// Returns the width of the image.
+    /// # Returns
+    /// * The width of the image.
+    #[inline]
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Returns the height of the image.
+    /// # Returns
+    /// * The height of the image.
+    #[inline]
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    /// Returns the type of the image.
+    /// # Returns
+    /// * The type of the image.
+    #[inline]
+    pub fn color_type(&self) -> ColorType {
+        self.color_type
+    }
+
+    /// Returns the bytes of the image as a native endian slice.
+    /// # Returns
+    /// * The bytes of the image.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// Returns the bytes of the image as a mutable native endian slice.
+    /// # Returns
+    /// * The bytes of the image.
+    #[inline]
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        &mut self.data
+    }
+
+    /// Returns the background color of the image.
+    /// # Returns
+    /// * The background color of the image.
+    #[inline]
+    pub fn background_color(&self) -> Option<Color> {
+        self.background_color
+    }
+
+    /// Sets the background color of the image.
+    /// # Arguments
+    /// * `color` - The new background color.
+    /// # Returns
+    /// * Ok(()) if the background color was set successfully.
+    /// * Err(Error::WrongColor) if the color is not compatible with the image type.
+    pub fn set_background_color(&mut self, color: Color) -> Result<(), Error> {
+        if ColorType::from(color) == self.color_type {
+            self.background_color = Some(color);
+            Ok(())
+        } else {
+            Err(Error::WrongColor)
+        }
+    }
+
+    /// Reset the image to the background color.
+    /// If the background color is not set, this is no-op.
+    pub fn clear(&mut self) {
+        if let Some(color) = self.background_color {
+            let color_slice = color.as_bytes();
+            for i in (0..self.data.len()).step_by(color_slice.len()) {
+                self.data[i..(color_slice.len() + i)].copy_from_slice(color_slice);
+            }
         }
     }
 }
@@ -2257,50 +2316,12 @@ impl Indexing for Image {
 }
 
 impl Utilities for Image {
-    #[inline]
-    fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    #[inline]
-    fn width(&self) -> usize {
-        self.width
-    }
-
-    #[inline]
-    fn height(&self) -> usize {
-        self.height
-    }
-
-    #[inline]
-    fn color_type(&self) -> ColorType {
-        self.color_type
-    }
-
-    fn clear(&mut self) {
-        if let Some(color) = self.background_color {
-            let color_slice = color.as_slice();
-            for x in 0..self.data.len() {
-                self.data[x] = color_slice[x % color_slice.len()];
-            }
-        }
-    }
-
     fn fill_image(&mut self, color: Color) -> Result<(), Error> {
         if ColorType::from(color) != self.color_type {
             Err(Error::WrongColor)
         } else {
             self.fill_unchecked((.., ..), color);
             Ok(())
-        }
-    }
-
-    fn set_background(&mut self, color: Color) -> Result<(), Error> {
-        if ColorType::from(color) == self.color_type {
-            self.background_color = Some(color);
-            Ok(())
-        } else {
-            Err(Error::WrongColor)
         }
     }
 }
@@ -2338,8 +2359,8 @@ mod tests {
     fn utilities_fields() {
         let image = Image::new(100, 100, Color::GRAY8(255));
 
-        assert_eq!(image.data(), &vec![255; 100 * 100]);
-        assert_eq!(image.data(), &image.data);
+        assert_eq!(image.as_bytes(), &vec![255; 100 * 100]);
+        assert_eq!(image.as_bytes(), &image.data);
 
         assert_eq!(image.width(), 100);
         assert_eq!(image.width(), image.width);

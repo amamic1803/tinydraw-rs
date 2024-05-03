@@ -4,7 +4,7 @@
 //!
 //! Example usage:
 //! ```rust
-//! use tinydraw::{Image, IO};
+//! use tinydraw::Image;
 //!
 //! let background_color: [u8; 3] = [255, 155, 0];
 //! //let mut image: Image<[u8; 3]> = Image::new(640, 360, background_color);
@@ -30,22 +30,16 @@
 //! Coordinates origin is in the bottom left corner of the image.
 
 pub mod colors;
-pub mod conversions;
 pub mod error;
 pub mod image;
-pub mod io;
+mod conversions;
+mod io;
 
 #[doc(inline)]
 pub use colors::*;
-
-#[doc(inline)]
-pub use conversions::*;
 
 #[doc(inline)]
 pub use error::*;
 
 #[doc(inline)]
 pub use image::*;
-
-#[doc(inline)]
-pub use io::*;
