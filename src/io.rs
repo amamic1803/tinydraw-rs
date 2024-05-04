@@ -41,25 +41,7 @@ impl Image {
 
         // if they do, store the background color
         let background_color = if same_data {
-            Some(match color_type {
-                ColorType::GRAY8 => Color::GRAY8(bytes[0]),
-                ColorType::GRAYA8 => Color::GRAYA8([bytes[0], bytes[1]]),
-                ColorType::GRAY16 => Color::GRAY16(u16::from_ne_bytes([bytes[0], bytes[1]])),
-                ColorType::GRAYA16 => Color::GRAYA16([u16::from_ne_bytes([bytes[0], bytes[1]]), u16::from_ne_bytes([bytes[2], bytes[3]])]),
-                ColorType::RGB8 => Color::RGB8([bytes[0], bytes[1], bytes[2]]),
-                ColorType::RGBA8 => Color::RGBA8([bytes[0], bytes[1], bytes[2], bytes[3]]),
-                ColorType::RGB16 => Color::RGB16([
-                    u16::from_ne_bytes([bytes[0], bytes[1]]),
-                    u16::from_ne_bytes([bytes[2], bytes[3]]),
-                    u16::from_ne_bytes([bytes[4], bytes[5]]),
-                ]),
-                ColorType::RGBA16 => Color::RGBA16([
-                    u16::from_ne_bytes([bytes[0], bytes[1]]),
-                    u16::from_ne_bytes([bytes[2], bytes[3]]),
-                    u16::from_ne_bytes([bytes[4], bytes[5]]),
-                    u16::from_ne_bytes([bytes[6], bytes[7]]),
-                ]),
-            })
+            Some(Color::from_bytes(color_type, &bytes[0..bytes_per_pixel]))
         } else {
             None
         };

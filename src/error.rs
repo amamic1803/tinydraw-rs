@@ -12,7 +12,7 @@ pub enum Error {
     /// The invalid type
     InvalidType,
     /// The index is out of bounds
-    OutOfBounds,
+    IndexOutOfBounds,
     /// The given color is wrong
     WrongColor,
 }
@@ -26,7 +26,7 @@ impl std::fmt::Display for Error {
             Error::InvalidOpacity => write!(f, "Error: Invalid opacity value!"),
             Error::InvalidSize => write!(f, "Error: The size of the image is invalid!"),
             Error::InvalidType => write!(f, "Error: The unsupported type!"),
-            Error::OutOfBounds => write!(f, "Error: Index out of bounds!"),
+            Error::IndexOutOfBounds => write!(f, "Error: Index out of bounds!"),
             Error::WrongColor => write!(f, "Error: Wrong color!"),
         }
     }

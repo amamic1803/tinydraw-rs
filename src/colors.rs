@@ -27,9 +27,9 @@ pub enum ColorType {
     RGBA16,
 }
 impl ColorType {
+    /// Return the number of bytes per pixel
     #[inline]
     pub const fn bytes_per_pixel(&self) -> usize {
-        //! Return the number of bytes per pixel
         match self {
             ColorType::GRAY8 => 1,
             ColorType::GRAYA8 => 2,
@@ -123,19 +123,10 @@ pub enum Color {
     RGBA16([u16; 4]),
 }
 impl Color {
+    /// Return the number of bytes per pixel
     #[inline]
-    pub const fn bytes_per_pixel(&self) -> usize {
-        //! Return the number of bytes per pixel
-        match self {
-            Color::GRAY8(_) => 1,
-            Color::GRAYA8(_) => 2,
-            Color::GRAY16(_) => 2,
-            Color::GRAYA16(_) => 4,
-            Color::RGB8(_) => 3,
-            Color::RGBA8(_) => 4,
-            Color::RGB16(_) => 6,
-            Color::RGBA16(_) => 8,
-        }
+    pub fn bytes_per_pixel(&self) -> usize {
+        ColorType::from(*self).bytes_per_pixel()
     }
 
     /// Returns the slice of bytes of the color.
@@ -152,6 +143,38 @@ impl Color {
             Color::RGBA8(color) => color as &[u8],
             Color::RGB16(color) => unsafe { slice::from_raw_parts(color.as_ptr() as *const u8, 6) },
             Color::RGBA16(color) => unsafe { slice::from_raw_parts(color.as_ptr() as *const u8, 8) },
+        }
+    }
+
+    /// Create a color from the bytes.
+    /// The bytes of u16 should be represented in native endianness.
+    /// The length of the bytes should match the color type.
+    /// # Returns
+    /// The color
+    /// # Panics
+    /// If the number of bytes does not match the color type
+    pub const fn from_bytes(color_type: ColorType, bytes: &[u8]) -> Self {
+        if color_type.bytes_per_pixel() != bytes.len() {
+            panic!("Invalid number of bytes for the color type");
+        }
+        match color_type {
+            ColorType::GRAY8 => Color::GRAY8(bytes[0]),
+            ColorType::GRAYA8 => Color::GRAYA8([bytes[0], bytes[1]]),
+            ColorType::GRAY16 => Color::GRAY16(u16::from_ne_bytes([bytes[0], bytes[1]])),
+            ColorType::GRAYA16 => Color::GRAYA16([u16::from_ne_bytes([bytes[0], bytes[1]]), u16::from_ne_bytes([bytes[2], bytes[3]])]),
+            ColorType::RGB8 => Color::RGB8([bytes[0], bytes[1], bytes[2]]),
+            ColorType::RGBA8 => Color::RGBA8([bytes[0], bytes[1], bytes[2], bytes[3]]),
+            ColorType::RGB16 => Color::RGB16([
+                u16::from_ne_bytes([bytes[0], bytes[1]]),
+                u16::from_ne_bytes([bytes[2], bytes[3]]),
+                u16::from_ne_bytes([bytes[4], bytes[5]]),
+            ]),
+            ColorType::RGBA16 => Color::RGBA16([
+                u16::from_ne_bytes([bytes[0], bytes[1]]),
+                u16::from_ne_bytes([bytes[2], bytes[3]]),
+                u16::from_ne_bytes([bytes[4], bytes[5]]),
+                u16::from_ne_bytes([bytes[6], bytes[7]])
+            ]),
         }
     }
 }

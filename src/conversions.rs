@@ -1201,7 +1201,7 @@ impl Image {
 #[cfg(test)]
 mod tests {
     use crate::colors::{Color, ColorType};
-    use crate::image::{Image, Indexing};
+    use crate::image::Image;
 
     fn conversion_test(img1_colors: (Color, Color), img2_colors: (Color, Color)) {
         assert_eq!(ColorType::from(img1_colors.0), ColorType::from(img1_colors.1));
