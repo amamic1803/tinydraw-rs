@@ -9,8 +9,6 @@ pub enum Error {
     InvalidOpacity,
     /// The invalid size of the image
     InvalidSize,
-    /// The invalid type
-    InvalidType,
     /// The index is out of bounds
     IndexOutOfBounds,
     /// The given color is wrong
@@ -25,7 +23,6 @@ impl std::fmt::Display for Error {
             Error::FileExists => write!(f, "Error: File already exists!"),
             Error::InvalidOpacity => write!(f, "Error: Invalid opacity value!"),
             Error::InvalidSize => write!(f, "Error: The size of the image is invalid!"),
-            Error::InvalidType => write!(f, "Error: The unsupported type!"),
             Error::IndexOutOfBounds => write!(f, "Error: Index out of bounds!"),
             Error::WrongColor => write!(f, "Error: Wrong color!"),
         }

@@ -126,6 +126,7 @@ impl Image {
     }
     
     /// Converts the image to the specified color type.
+    /// If the image is already in the specified color type, this function does nothing.
     /// # Arguments
     /// * ```color_type``` - The color type to which the image will be converted.
     pub fn convert(&mut self, color_type: ColorType) {

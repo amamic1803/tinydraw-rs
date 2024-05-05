@@ -59,7 +59,7 @@ impl Image {
     /// # Arguments
     /// * ```path``` - The path to the file.
     /// # Returns
-    /// * [Result] which holds the new [Image] or [Box<dyn std::error::Error>].
+    /// * [Result] with the new [Image] or [Err].
     #[cfg(feature = "image")]
     pub fn from_file<F: AsRef<Path>>(path: F) -> Result<Image, Box<dyn std::error::Error>> {
         let image: DynamicImage = ImageReader::open(path)?.decode()?;
@@ -67,11 +67,10 @@ impl Image {
     }
 
     /// Writes the image to the given file. Requires the ```image``` feature.
+    /// File format is determined by the file extension.
     /// # Arguments
     /// * ```path``` - The path to the file.
     /// * ```overwrite``` - Whether to overwrite the file if it already exists.
-    /// # Returns
-    /// * [Result] which holds [Ok] or [Box<dyn std::error::Error>].
     #[cfg(feature = "image")]
     pub fn to_file<F: AsRef<Path>>(&self, path: F, overwrite: bool) -> Result<(), Box<dyn std::error::Error>> {
         let path = path.as_ref();
