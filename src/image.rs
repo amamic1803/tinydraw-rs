@@ -1178,8 +1178,10 @@ impl Image {
         // create uninitialized data vector
         let len = width * height * background_color.as_bytes().len();
         let mut data = Vec::with_capacity(len);
-        unsafe { data.set_len(len); }
-        
+        unsafe {
+            data.set_len(len);
+        }
+
         // create image
         let mut image = Self {
             data,
@@ -1188,10 +1190,10 @@ impl Image {
             color_type: ColorType::from(background_color),
             background_color: Some(background_color),
         };
-        
+
         // call clear to fill the image with the background color (initialize data)
         image.clear();
-        
+
         image
     }
 
@@ -1249,6 +1251,7 @@ impl Image {
     /// # Returns
     /// * Ok(()) if the background color was set successfully.
     /// * Err(Error::WrongColor) if the color is not compatible with the image type.
+    #[inline]
     pub fn set_background_color(&mut self, color: Color) -> Result<(), Error> {
         if ColorType::from(color) == self.color_type {
             self.background_color = Some(color);
@@ -1267,6 +1270,19 @@ impl Image {
                 self.data[i..(color_slice.len() + i)].copy_from_slice(color_slice);
             }
         }
+    }
+
+    /// Fill the image with the given color.
+    /// # Arguments
+    /// * `color` - The color to fill the image with.
+    /// # Returns
+    /// * [Ok] if the image was filled successfully.
+    /// * [Err] if there was an error.
+    /// # Errors
+    /// * [Error::WrongColor] if the color is not compatible with the image type.
+    #[inline]
+    pub fn fill_image(&mut self, color: Color) -> Result<(), Error> {
+        self.set((.., ..), color)
     }
 }
 
