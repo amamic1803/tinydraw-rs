@@ -30,10 +30,11 @@
 //! Coordinates origin is in the bottom left corner of the image.
 
 pub mod colors;
+mod conversions;
+mod drawing;
 pub mod error;
 pub mod image;
 mod indexing;
-mod conversions;
 mod io;
 
 #[doc(inline)]
